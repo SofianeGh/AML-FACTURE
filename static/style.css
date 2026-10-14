@@ -47,6 +47,10 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* le pied de page reste en bas de l'écran même quand la page est courte */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 h1, h2 { margin: 0; line-height: 1.2; }
@@ -108,7 +112,17 @@ input:focus-visible, select:focus-visible, button:focus-visible {
 #btn-dossier { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- contenu ---- */
-main { max-width: 1600px; margin: 0 auto; padding: 22px 24px 60px; }
+main { flex: 1; width: 100%; max-width: 1600px; margin: 0 auto; padding: 22px 24px 40px; }
+
+.credit {
+  padding: 8px 16px 10px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.credit a { color: var(--text); font-weight: 600; text-decoration: none; }
+.credit a:hover, .credit a:focus-visible { color: var(--primary); text-decoration: underline; }
 
 .dropzone {
   display: flex;
