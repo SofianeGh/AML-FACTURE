@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Factures METRO</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Factures METRO</h1>
+      <p>Prix HT → TTC + marge, archivage Nextcloud</p>
+    </div>
+
+    <div class="controls">
+      <label class="field">
+        <span>Marge</span>
+        <span class="inline">
+          <input id="marge" type="number" step="0.5" min="0" value="20" inputmode="decimal">
+          <select id="marge-type" aria-label="Type de marge">
+            <option value="pct">%</option>
+            <option value="eur">€ / pièce</option>
+          </select>
+        </span>
+      </label>
+      <label class="field" title="Montant fixe ajouté au prix de vente de chaque article (frais du TPE), après la marge">
+        <span>Taxe TPE</span>
+        <span class="inline">
+          <input id="taxe" type="number" step="0.01" min="0" placeholder="0,00" inputmode="decimal">
+          <span class="unite">€ / pièce</span>
+        </span>
+      </label>
+      <label class="field">
+        <span>Arrondi du prix de vente</span>
+        <select id="arrondi">
+          <option value="0">Aucun</option>
+          <option value="0.05">0,05 € sup.</option>
+          <option value="0.10">0,10 € sup.</option>
+          <option value="0.50">0,50 € sup.</option>
+          <option value="1">1 € sup.</option>
+        </select>
+      </label>
+      <div class="field">
+        <span>Dossier Nextcloud</span>
+        <span class="inline">
+          <button id="btn-dossier" class="btn ghost" type="button" title="Choisir le dossier">
+            <span id="dossier-courant">—</span>
+          </button>
+          <button id="btn-reglages" class="btn ghost icon" type="button" title="Réglages Nextcloud" aria-label="Réglages Nextcloud">⚙</button>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <label id="dropzone" class="dropzone">
+      <input id="fichiers" type="file" accept="application/pdf,.pdf" multiple hidden>
+      <strong>Déposez vos factures METRO (PDF) ici</strong>
+      <span>ou cliquez pour les choisir — plusieurs fichiers à la fois possible</span>
+    </label>
+
+    <div id="actions-globales" class="global-actions" hidden>
+      <span id="resume-global"></span>
+      <button id="btn-tout-envoyer" class="btn primary" type="button">Tout envoyer sur Nextcloud</button>
+    </div>
+
+    <div id="factures"></div>
+  </main>
+
+  <template id="tpl-facture">
+    <section class="facture">
+      <div class="facture-head">
+        <div>
+          <h2>Facture du <span data-f="date"></span></h2>
+          <p class="meta" data-f="meta"></p>
+        </div>
+        <div class="totaux" data-f="totaux"></div>
+      </div>
+      <div class="controle" data-f="controle"></div>
+      <div class="facture-actions">
+        <label class="nom-fichier">
+          <span>Nom sur Nextcloud</span>
+          <span class="inline">
+            <input data-f="nom" type="text" placeholder="JJ-MM-AAAA" pattern="\d{2}-\d{2}-\d{4}" size="11">
+            <span class="suffix">.pdf</span>
+          </span>
+        </label>
+        <button data-f="envoyer" class="btn primary" type="button">Envoyer sur Nextcloud</button>
+        <button data-f="csv" class="btn" type="button">Exporter CSV</button>
+        <button data-f="retirer" class="btn ghost" type="button">Retirer</button>
+        <span class="statut" data-f="statut" role="status"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Article</th>
+              <th title="Seules les lignes Vente ont un prix de vente. À l'envoi, un PDF est créé pour chaque catégorie utilisée.">Catégorie</th>
+              <th class="num" title="Unités facturées (colisage × quantité)">Qté</th>
+              <th class="num" title="Nombre de pièces vendues séparément dans une unité (ex. pack de 10 → 10)">Pièces / u.</th>
+              <th class="num">Coût HT / pièce</th>
+              <th class="num">TVA</th>
+              <th class="num">Coût TTC / pièce</th>
+              <th class="num" title="Coût TTC + marge + taxe TPE, avec l'arrondi choisi">Prix de vente optimal</th>
+              <th class="num accent" title="Le prix auquel vous vendez : pré-rempli avec le prix optimal, modifiable. ↺ revient au prix optimal.">Prix de vente</th>
+              <th class="num">Total TTC</th>
+            </tr>
+          </thead>
+          <tbody data-f="lignes"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="9">Total des lignes TTC</td>
+              <td class="num" data-f="total-ttc"></td>
+            </tr>
+            <!-- une ligne par catégorie utilisée, ajoutée par app.js -->
+            <tr class="separe">
+              <td colspan="9">Chiffre d'affaires si toute la catégorie Vente est vendue (à vos prix)</td>
+              <td class="num" data-f="ca"></td>
+            </tr>
+            <tr>
+              <td colspan="9">dont taxe TPE</td>
+              <td class="num" data-f="taxes"></td>
+            </tr>
+            <tr class="benefice">
+              <td colspan="9">Bénéfice sur les ventes (hors taxe TPE)</td>
+              <td class="num" data-f="benefice"></td>
+            </tr>
+            <!-- affichées seulement s'il y a des cadeaux conducteur : ils sont une perte sur la course -->
+            <tr class="perte-cadeau" hidden>
+              <td colspan="9">Cadeau conducteur</td>
+              <td class="num" data-f="cadeau"></td>
+            </tr>
+            <tr class="benefice" hidden>
+              <td colspan="9">Bénéfice après cadeau conducteur</td>
+              <td class="num" data-f="benefice-net"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  </template>
+
+  <dialog id="dlg-reglages">
+    <form id="form-reglages" method="dialog">
+      <h2>Connexion Nextcloud</h2>
+      <label class="field">
+        <span>Adresse du serveur</span>
+        <input name="nextcloud_url" type="text" placeholder="https://cloud.exemple.fr" required>
+      </label>
+      <label class="field">
+        <span>Identifiant</span>
+        <input name="nextcloud_login" type="text" autocomplete="username" required>
+      </label>
+      <label class="field">
+        <span>Mot de passe d'application</span>
+        <input name="nextcloud_password" type="password" autocomplete="current-password">
+        <small>Nextcloud → Paramètres personnels → Sécurité → « Créer un nouveau mot de passe d'application ».</small>
+      </label>
+      <p class="erreur" data-f="erreur" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" value="annuler" data-close>Annuler</button>
+        <button class="btn primary" type="submit" value="ok">Enregistrer et tester</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-dossier">
+    <div class="dialog-body">
+      <h2>Dossier de destination</h2>
+      <nav class="fil" data-f="fil" aria-label="Chemin"></nav>
+      <ul class="liste-dossiers" data-f="liste"></ul>
+      <form class="nouveau-dossier" data-f="form-nouveau">
+        <input name="nom" type="text" placeholder="Nouveau sous-dossier" required>
+        <button class="btn" type="submit">Créer</button>
+      </form>
+      <p class="erreur" data-f="erreur" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" data-close>Annuler</button>
+        <button class="btn primary" type="button" data-f="choisir">Choisir ce dossier</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
