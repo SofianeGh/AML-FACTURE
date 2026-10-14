@@ -8,21 +8,53 @@ const eur3 = new Intl.NumberFormat("fr-FR", {
 const nombre = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 });
 const pct = (v) => (v == null ? "?" : `${nombre.format(v)} %`);
 
-// Préférences locales au navigateur (marge, arrondi, pièces et articles non vendus)
+// Préférences partagées entre tous les membres (marge, taxe TPE, arrondi ; par article :
+// pièces, prix choisi, catégorie Local). Chargées au démarrage, enregistrées sur le serveur
+// par petits lots (une requête pour plusieurs frappes).
 const store = {
+  valeurs: {},
+  enAttente: {},
+  minuteur: null,
   get(cle, defaut) {
-    try {
-      const v = localStorage.getItem(cle);
-      return v === null ? defaut : JSON.parse(v);
-    } catch { return defaut; }
+    return cle in this.valeurs ? this.valeurs[cle] : defaut;
   },
   set(cle, valeur) {
-    try { localStorage.setItem(cle, JSON.stringify(valeur)); } catch { /* stockage indisponible */ }
+    this.valeurs[cle] = valeur;
+    this.planifier(cle, valeur);
   },
   remove(cle) {
-    try { localStorage.removeItem(cle); } catch { /* stockage indisponible */ }
+    delete this.valeurs[cle];
+    this.planifier(cle, null);
+  },
+  planifier(cle, valeur) {
+    this.enAttente[cle] = valeur;
+    clearTimeout(this.minuteur);
+    this.minuteur = setTimeout(() => this.envoyer(), 500);
+  },
+  async envoyer() {
+    const lot = this.enAttente;
+    this.enAttente = {};
+    if (!Object.keys(lot).length) return;
+    try {
+      await api("api/preferences", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(lot),
+      });
+      alerte("");
+    } catch (e) {
+      alerte(`Préférences non enregistrées : ${e.message}`);
+    }
   },
 };
+
+// enregistre ce qui reste avant de quitter la page
+window.addEventListener("pagehide", () => {
+  if (!Object.keys(store.enAttente).length) return;
+  fetch("api/preferences", {
+    method: "PUT", keepalive: true,
+    headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+    body: JSON.stringify(store.enAttente),
+  });
+});
 
 // Catégorie de dépense de chaque ligne (mêmes clés que recap_pdf.CATEGORIES côté serveur).
 // Seules les lignes VENTE ont un prix de vente ; un PDF est créé pour chaque catégorie utilisée.
@@ -34,14 +66,29 @@ const CATEGORIES = {
   hors: "Hors catégorie",
 };
 
-const state = { config: null, factures: [] };
+const state = { config: null, moi: null, factures: [] };
 
+// Adresses relatives (« api/… ») : l'application peut être servie dans un sous-dossier du site.
+// L'en-tête X-Requested-With est exigé par le serveur pour toute modification (anti-CSRF).
 async function api(url, options = {}) {
-  const resp = await fetch(url, options);
+  const resp = await fetch(url, {
+    ...options, headers: { "X-Requested-With": "fetch", ...options.headers },
+  });
+  if (resp.status === 401) {
+    location.href = "connexion"; // session expirée
+    throw new Error("Session expirée : reconnectez-vous.");
+  }
   let data = null;
   try { data = await resp.json(); } catch { /* réponse non JSON */ }
   if (!resp.ok) throw new Error(data?.erreur || `Erreur HTTP ${resp.status}`);
   return data;
+}
+
+// Bandeau d'erreur en haut de page (texte vide = masqué)
+function alerte(texte) {
+  const bandeau = $("#alerte");
+  bandeau.textContent = texte;
+  bandeau.hidden = !texte;
 }
 
 const postJSON = (url, body) => api(url, {
@@ -148,10 +195,12 @@ function recalcAll() {
   majResumeGlobal();
 }
 
-margeInput.value = store.get("marge", "20");
-margeType.value = store.get("margeType", "pct");
-arrondiSel.value = store.get("arrondi", "0");
-taxeInput.value = store.get("taxe", "");
+function afficherReglages() {
+  margeInput.value = store.get("marge", "20");
+  margeType.value = store.get("margeType", "pct");
+  arrondiSel.value = store.get("arrondi", "0");
+  taxeInput.value = store.get("taxe", "");
+}
 [margeInput, margeType, taxeInput, arrondiSel].forEach((el) => el.addEventListener("input", recalcAll));
 
 // ---------------------------------------------------------------- factures
@@ -377,6 +426,7 @@ function carteErreur(fichier, message) {
 }
 
 async function ajouterFichiers(fichiers) {
+  await pret; // préférences partagées chargées (pièces, prix, catégorie Local)
   const zone = $("#factures");
   for (const fichier of fichiers) {
     if (!/\.pdf$/i.test(fichier.name) && fichier.type !== "application/pdf") {
@@ -390,7 +440,7 @@ async function ajouterFichiers(fichiers) {
     const fd = new FormData();
     fd.append("fichier", fichier);
     try {
-      const data = await api("/api/factures", { method: "POST", body: fd });
+      const data = await api("api/factures", { method: "POST", body: fd });
       const f = {
         file: fichier,
         data,
@@ -441,7 +491,7 @@ async function envoyer(f) {
   const fd = formulaire(f);
   if (!fd) return false;
   if (!state.config?.configure) {
-    ouvrirReglages();
+    besoinNextcloud();
     return false;
   }
   fd.append("dossier", state.config.dossier);
@@ -449,7 +499,7 @@ async function envoyer(f) {
   bouton.disabled = true;
   statut(f, "Envoi en cours…");
   try {
-    const res = await api("/api/nextcloud/envoyer", { method: "POST", body: fd });
+    const res = await api("api/nextcloud/envoyer", { method: "POST", body: fd });
     const recaps = res.recaps.map((r) => r.nom.split(" - ").pop().replace(/\.pdf$/, ""));
     statut(f, [
       res.deja_present ? `Facture déjà présente : ${res.chemin}` : `✓ Envoyé : ${res.chemin}`,
@@ -468,11 +518,11 @@ async function envoyer(f) {
 // Adresse du PDF d'une catégorie, tel qu'il sera envoyé (le serveur garde la facture analysée)
 function urlApercu(f, cat) {
   const params = new URLSearchParams({ nom: `${f.q("nom").value.trim()}.pdf`, categories: f.categories.join(",") });
-  return `/api/recap/${f.data.id}/${cat}?${params}`;
+  return `api/recap/${f.data.id}/${cat}?${params}`;
 }
 
 $("#btn-tout-envoyer").addEventListener("click", async () => {
-  if (!state.config?.configure) return ouvrirReglages();
+  if (!state.config?.configure) return besoinNextcloud();
   for (const f of state.factures) await envoyer(f);
 });
 
@@ -533,7 +583,14 @@ document.querySelectorAll("dialog [data-close]").forEach((b) =>
 
 function majDossier() {
   const c = state.config;
-  $("#dossier-courant").textContent = c?.configure ? `/${c.dossier}` : "Configurer Nextcloud…";
+  $("#dossier-courant").textContent = c?.configure ? `/${c.dossier}`
+    : state.moi?.admin ? "Configurer Nextcloud…" : "Nextcloud non configuré";
+}
+
+// Nextcloud pas encore connecté : un administrateur le configure, les autres sont prévenus
+function besoinNextcloud() {
+  if (state.moi?.admin) ouvrirReglages();
+  else alerte("Nextcloud n'est pas encore configuré : demandez à un administrateur Local Stock.");
 }
 
 const dlgReglages = $("#dlg-reglages");
@@ -557,7 +614,7 @@ formReglages.addEventListener("submit", async (e) => {
   bouton.disabled = true;
   erreur.textContent = "Connexion à Nextcloud…";
   try {
-    state.config = await postJSON("/api/config", {
+    state.config = await postJSON("api/config", {
       nextcloud_url: formReglages.nextcloud_url.value,
       nextcloud_login: formReglages.nextcloud_login.value,
       nextcloud_password: formReglages.nextcloud_password.value,
@@ -588,7 +645,7 @@ async function chargerDossier(chemin) {
   dq("erreur").textContent = "";
   let res;
   try {
-    res = await api(`/api/nextcloud/dossiers?chemin=${encodeURIComponent(chemin)}`);
+    res = await api(`api/nextcloud/dossiers?chemin=${encodeURIComponent(chemin)}`);
   } catch (e) {
     // dossier pas encore créé : on remonte au parent (il sera créé au premier envoi)
     if (chemin) return chargerDossier(parent(chemin));
@@ -616,7 +673,7 @@ async function chargerDossier(chemin) {
 }
 
 async function ouvrirDossier() {
-  if (!state.config?.configure) return ouvrirReglages();
+  if (!state.config?.configure) return besoinNextcloud();
   dlgDossier.showModal();
   await chargerDossier(state.config.dossier);
 }
@@ -625,7 +682,7 @@ dq("form-nouveau").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
   try {
-    const res = await postJSON("/api/nextcloud/dossiers", { parent: cheminCourant, nom: form.nom.value.trim() });
+    const res = await postJSON("api/nextcloud/dossiers", { parent: cheminCourant, nom: form.nom.value.trim() });
     form.reset();
     await chargerDossier(res.chemin);
   } catch (err) {
@@ -635,7 +692,7 @@ dq("form-nouveau").addEventListener("submit", async (e) => {
 
 dq("choisir").addEventListener("click", async () => {
   try {
-    state.config = await postJSON("/api/config", { dossier: cheminCourant });
+    state.config = await postJSON("api/config", { dossier: cheminCourant });
     majDossier();
     dlgDossier.close();
   } catch (err) {
@@ -645,8 +702,109 @@ dq("choisir").addEventListener("click", async () => {
 
 $("#btn-dossier").addEventListener("click", ouvrirDossier);
 
+// ---------------------------------------------------------------- session et comptes
+
+function majSession() {
+  const moi = state.moi;
+  $("#utilisateur").textContent = moi.admin ? `${moi.nom} (admin)` : moi.nom;
+  $("#liens-admin").hidden = !moi.admin;
+  $("#btn-reglages").hidden = !moi.admin;
+}
+
+$("#btn-deconnexion").addEventListener("click", async () => {
+  await store.envoyer();
+  await api("api/deconnexion", { method: "POST" }).catch(() => {});
+  location.href = "connexion";
+});
+
+const dlgMdp = $("#dlg-mdp");
+const formMdp = $("#form-mdp");
+
+$("#btn-mdp").addEventListener("click", () => {
+  formMdp.reset();
+  $("[data-f=erreur]", formMdp).textContent = "";
+  dlgMdp.showModal();
+});
+
+formMdp.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const erreur = $("[data-f=erreur]", formMdp);
+  if (formMdp.nouveau.value !== formMdp.confirmation.value) {
+    erreur.textContent = "Les deux nouveaux mots de passe ne correspondent pas.";
+    return;
+  }
+  try {
+    await postJSON("api/moi/mot-de-passe", { actuel: formMdp.actuel.value, nouveau: formMdp.nouveau.value });
+    dlgMdp.close();
+  } catch (err) {
+    erreur.textContent = err.message;
+  }
+});
+
+const dlgComptes = $("#dlg-comptes");
+const cq = (k) => dlgComptes.querySelector(`[data-f="${k}"]`);
+
+function afficherComptes(comptes) {
+  cq("liste").replaceChildren(...comptes.map((c) => {
+    const li = el("li", {},
+      el("span", { class: "nom" }, c.nom),
+      el("span", { class: c.admin ? "pastille cat-vente" : "pastille cat-local" }, c.admin ? "admin" : "membre"));
+    if (c.nom !== state.moi.nom) {
+      const suppr = el("button", { class: "lien", type: "button" }, "supprimer");
+      suppr.addEventListener("click", async () => {
+        if (!confirm(`Supprimer le compte « ${c.nom} » ?`)) return;
+        try {
+          afficherComptes(await api(`api/comptes/${encodeURIComponent(c.nom)}`, { method: "DELETE" }));
+        } catch (err) {
+          cq("erreur").textContent = err.message;
+        }
+      });
+      li.append(suppr);
+    }
+    return li;
+  }));
+}
+
+$("#btn-comptes").addEventListener("click", async () => {
+  cq("erreur").textContent = "";
+  cq("form-nouveau").reset();
+  dlgComptes.showModal();
+  try {
+    afficherComptes(await api("api/comptes"));
+  } catch (err) {
+    cq("erreur").textContent = err.message;
+  }
+});
+
+cq("form-nouveau").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.currentTarget;
+  cq("erreur").textContent = "";
+  try {
+    afficherComptes(await postJSON("api/comptes", {
+      nom: form.nom.value.trim(), mot_de_passe: form.mot_de_passe.value, admin: form.admin.checked,
+    }));
+    form.reset();
+  } catch (err) {
+    cq("erreur").textContent = err.message;
+  }
+});
+
 // ---------------------------------------------------------------- démarrage
 
-api("/api/config")
-  .then((c) => { state.config = c; majDossier(); })
-  .catch(() => { $("#dossier-courant").textContent = "Serveur injoignable"; });
+async function demarrer() {
+  const [moi, preferences, config] = await Promise.all([
+    api("api/moi"), api("api/preferences"), api("api/config"),
+  ]);
+  state.moi = moi;
+  state.config = config;
+  store.valeurs = preferences;
+  afficherReglages();
+  majSession();
+  majDossier();
+}
+
+const pret = demarrer().catch((e) => {
+  alerte(`Démarrage impossible : ${e.message}`);
+  $("#dossier-courant").textContent = "Serveur injoignable";
+});

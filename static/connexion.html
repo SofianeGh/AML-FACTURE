@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion · Factures METRO</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <main class="page-connexion">
+    <form id="form-connexion" class="carte-connexion">
+      <h1>Factures METRO</h1>
+      <p class="meta">Espace Local Stock de l'AML</p>
+      <label class="field">
+        <span>Identifiant</span>
+        <input name="nom" type="text" autocomplete="username" autocapitalize="none" required autofocus>
+      </label>
+      <label class="field">
+        <span>Mot de passe</span>
+        <input name="mot_de_passe" type="password" autocomplete="current-password" required>
+      </label>
+      <p class="erreur" data-f="erreur" role="alert"></p>
+      <button class="btn primary" type="submit">Se connecter</button>
+      <p class="meta">Pas de compte ? Demandez-le à un administrateur Local Stock.</p>
+    </form>
+  </main>
+
+  <footer class="credit">
+    Fait par <a href="https://github.com/SofianeGh" target="_blank" rel="noopener">Sofiane Abichou</a> · Local Stock · Mandat 25/26
+  </footer>
+
+  <script src="static/connexion.js"></script>
+</body>
+</html>

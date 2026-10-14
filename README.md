@@ -1,8 +1,11 @@
 # Factures METRO
 
-Application web locale pour l'**AML** (Association des Informaticiens Lyonnais) :
-elle lit les factures METRO, calcule les prix de vente TTC avec marge, classe chaque
-dépense par catégorie et archive le tout sur **Nextcloud**.
+Application web de l'**AML** (Association des Informaticiens Lyonnais) pour l'équipe
+**Local Stock** : après les courses, elle lit les factures METRO, calcule les prix de vente TTC
+avec marge, classe chaque dépense par catégorie et archive le tout sur **Nextcloud**.
+
+Elle est prévue pour être hébergée sur le site de l'AML, avec un compte par membre :
+voir **[DEPLOIEMENT.md](DEPLOIEMENT.md)**.
 
 ## Fonctionnalités
 
@@ -15,31 +18,26 @@ dépense par catégorie et archive le tout sur **Nextcloud**.
 - **Archivage Nextcloud** : la facture est envoyée dans le dossier choisi, renommée à sa date
   (`JJ-MM-AAAA.pdf`), avec un PDF récapitulatif par catégorie.
 - **Export CSV** de la liste de prix (ouvrable dans Excel).
+- **Comptes** : chaque membre se connecte ; les administrateurs gèrent les comptes et la
+  connexion Nextcloud. Marge, taxe TPE, arrondi et prix choisis sont **partagés** entre tous.
 - Plusieurs factures à la fois (glisser-déposer), thème clair / sombre automatique.
 
-## Installation et lancement
+## Mise en ligne
 
-Prérequis : Windows avec **Python 3.10 ou plus récent**.
+Docker, Python seul ou hébergement « Python App », reverse proxy HTTPS, sous-domaine ou
+sous-dossier du site : tout est dans **[DEPLOIEMENT.md](DEPLOIEMENT.md)**.
 
-Double-cliquer sur `start.bat`. Au premier lancement, l'environnement Python (`.venv`) est créé
-et les dépendances sont installées, puis la page http://localhost:5000 s'ouvre.
+## Lancement en local (Windows)
 
-En ligne de commande :
+Prérequis : **Python 3.10 ou plus récent**.
 
-```bash
-.venv\Scripts\python.exe app.py
-```
-
-Variables d'environnement optionnelles :
-
-| Variable | Défaut | Rôle |
-|---|---|---|
-| `PORT` | `5000` | port du serveur |
-| `HOST` | `127.0.0.1` | mettre `0.0.0.0` pour y accéder depuis un autre poste du réseau local |
+Double-cliquer sur `start.bat`. Il installe ce qu'il faut, demande au premier lancement
+l'identifiant et le mot de passe du premier administrateur, puis ouvre http://localhost:5000.
 
 ## Utilisation
 
-1. Cliquer sur ⚙ pour connecter Nextcloud (voir plus bas), puis choisir le dossier de destination.
+1. Se connecter. La première fois, un administrateur clique sur ⚙ pour connecter Nextcloud
+   (voir plus bas) ; chacun peut ensuite choisir le dossier de destination.
 2. Déposer une ou plusieurs factures METRO (PDF) dans la zone prévue.
 3. Régler la **marge**, la **taxe TPE** et l'**arrondi** en haut de la page.
 4. Pour chaque ligne, ajuster si besoin la **catégorie**, les **pièces par unité** et le **prix de vente**.
@@ -83,7 +81,7 @@ Seules les lignes **Vente** ont un prix de vente. Les autres catégories apparai
 tableau avec leur total et un lien « aperçu PDF ». Les **cadeaux conducteur** sont une perte
 sur la course : ils sont retirés du bénéfice (« Bénéfice après cadeau conducteur »).
 
-### Ce qui est mémorisé (dans le navigateur)
+### Ce qui est mémorisé (sur le serveur, commun à tous les membres)
 
 - marge, taxe TPE et arrondi ;
 - par article : pièces par unité, prix de vente saisi, catégorie *Local* (produits utilisés au
@@ -91,12 +89,19 @@ sur la course : ils sont retirés du bénéfice (« Bénéfice après cadeau con
 
 Les autres catégories (Event, Cadeau conducteur, Hors catégorie) ne valent que pour la ligne choisie.
 
+### Comptes
+
+- **Membre** : traite les factures et les envoie sur Nextcloud.
+- **Administrateur** : en plus, gère les comptes (« Comptes » en haut de la page) et la
+  connexion Nextcloud (⚙).
+- Chacun peut changer son mot de passe (« Mot de passe » en haut de la page).
+
 ## Nextcloud
 
 Cliquer sur ⚙ et saisir l'adresse du serveur, l'identifiant et un **mot de passe d'application**
 (Nextcloud → Paramètres personnels → Sécurité → « Créer un nouveau mot de passe d'application »).
-Ces informations sont enregistrées dans `config.json`, à côté de l'application (fichier exclu de
-git) ; le mot de passe n'est jamais renvoyé au navigateur.
+Ces informations sont enregistrées dans la base de l'application (`data/`, exclu de git) ;
+le mot de passe n'est jamais renvoyé au navigateur. Seul un administrateur peut les modifier.
 
 ### Fichiers envoyés
 
@@ -122,13 +127,18 @@ git) ; le mot de passe n'est jamais renvoyé au navigateur.
 
 | Fichier | Rôle |
 |---|---|
-| `app.py` | serveur web Flask et API |
+| `app.py` | serveur web Flask et API (connexion, sécurité, factures, Nextcloud) |
+| `stockage.py` | base SQLite : comptes, réglages Nextcloud, préférences partagées |
+| `manage.py` | gestion des comptes en ligne de commande |
 | `metro_parser.py` | lecture des factures METRO (`python metro_parser.py facture.pdf` pour tester) |
 | `nextcloud.py` | client WebDAV Nextcloud |
 | `recap_pdf.py` | PDF récapitulatif par catégorie |
-| `static/` | interface (HTML, CSS, JavaScript) |
+| `static/` | interface (HTML, CSS, JavaScript), page de connexion |
+| `wsgi.py`, `passenger_wsgi.py` | points d'entrée pour les serveurs WSGI et les hébergeurs « Python App » |
+| `Dockerfile`, `docker-compose.yml`, `.env.example` | déploiement Docker |
 | `start.bat` | installation et lancement sous Windows |
-| `requirements.txt` | dépendances Python (Flask, pdfplumber, reportlab, requests) |
+| `requirements.txt` | dépendances Python (Flask, pdfplumber, reportlab, requests, waitress) |
+| `DEPLOIEMENT.md` | guide de mise en ligne |
 
 ## Auteur
 

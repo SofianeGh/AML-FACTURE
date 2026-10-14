@@ -1,4 +1,8 @@
 .venv/
 __pycache__/
+# données de l'application : base (comptes, réglages Nextcloud), clé secrète
+data/
 config.json
+config.json.importe
+.env
 *.pdf

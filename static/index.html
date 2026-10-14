@@ -4,13 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Factures METRO</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
       <h1>Factures METRO</h1>
-      <p>Prix HT → TTC + marge, archivage Nextcloud</p>
+      <p class="session">
+        <span id="utilisateur">…</span>
+        · <button id="btn-mdp" class="lien" type="button">Mot de passe</button>
+        <span id="liens-admin" hidden>· <button id="btn-comptes" class="lien" type="button">Comptes</button></span>
+        · <button id="btn-deconnexion" class="lien" type="button">Déconnexion</button>
+      </p>
     </div>
 
     <div class="controls">
@@ -47,13 +52,15 @@
           <button id="btn-dossier" class="btn ghost" type="button" title="Choisir le dossier">
             <span id="dossier-courant">—</span>
           </button>
-          <button id="btn-reglages" class="btn ghost icon" type="button" title="Réglages Nextcloud" aria-label="Réglages Nextcloud">⚙</button>
+          <button id="btn-reglages" class="btn ghost icon" type="button" title="Connexion Nextcloud (administrateurs)" aria-label="Connexion Nextcloud" hidden>⚙</button>
         </span>
       </div>
     </div>
   </header>
 
   <main>
+    <div id="alerte" class="alerte" role="alert" hidden></div>
+
     <label id="dropzone" class="dropzone">
       <input id="fichiers" type="file" accept="application/pdf,.pdf" multiple hidden>
       <strong>Déposez vos factures METRO (PDF) ici</strong>
@@ -186,6 +193,56 @@
     </div>
   </dialog>
 
-  <script src="/static/app.js"></script>
+  <dialog id="dlg-mdp">
+    <form id="form-mdp" method="dialog">
+      <h2>Changer mon mot de passe</h2>
+      <label class="field">
+        <span>Mot de passe actuel</span>
+        <input name="actuel" type="password" autocomplete="current-password" required>
+      </label>
+      <label class="field">
+        <span>Nouveau mot de passe (8 caractères minimum)</span>
+        <input name="nouveau" type="password" autocomplete="new-password" minlength="8" required>
+      </label>
+      <label class="field">
+        <span>Confirmation</span>
+        <input name="confirmation" type="password" autocomplete="new-password" minlength="8" required>
+      </label>
+      <p class="erreur" data-f="erreur" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" data-close>Annuler</button>
+        <button class="btn primary" type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-comptes">
+    <div class="dialog-body">
+      <h2>Comptes Local Stock</h2>
+      <ul class="liste-comptes" data-f="liste"></ul>
+      <form class="nouveau-compte" data-f="form-nouveau">
+        <h3>Nouveau compte</h3>
+        <label class="field">
+          <span>Identifiant</span>
+          <input name="nom" type="text" autocapitalize="none" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{1,31}" required>
+        </label>
+        <label class="field">
+          <span>Mot de passe provisoire (8 caractères minimum)</span>
+          <input name="mot_de_passe" type="password" autocomplete="new-password" minlength="8" required>
+        </label>
+        <label class="case">
+          <input name="admin" type="checkbox">
+          Administrateur (gère les comptes et la connexion Nextcloud)
+        </label>
+        <button class="btn primary" type="submit">Créer le compte</button>
+      </form>
+      <p class="erreur" data-f="erreur" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" data-close>Fermer</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="static/app.js"></script>
 </body>
 </html>

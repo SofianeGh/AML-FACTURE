@@ -251,9 +251,35 @@ dialog input { width: 100%; }
 .nouveau-dossier { display: flex; gap: 8px; padding: 0 !important; }
 .nouveau-dossier input { flex: 1; }
 
+/* ---- session, alertes, comptes ---- */
+.brand .session { font-size: 0.82rem; }
+.brand .session #utilisateur { color: var(--text); font-weight: 600; }
+.alerte { margin-bottom: 14px; padding: 9px 12px; border-radius: 7px; background: var(--ko-bg); color: var(--ko); font-size: 0.9rem; }
+.liste-comptes { list-style: none; margin: 0; padding: 4px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 7px; }
+.liste-comptes li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; }
+.liste-comptes .nom { flex: 1; font-weight: 600; }
+.nouveau-compte { display: flex; flex-direction: column; gap: 10px; padding: 0 !important; }
+.nouveau-compte h3 { margin: 4px 0 0; font-size: 0.95rem; }
+.case { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; }
+dialog .case input { width: auto; }
+
+/* ---- page de connexion ---- */
+.page-connexion { display: flex; align-items: center; justify-content: center; }
+.carte-connexion {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(380px, 100%);
+  padding: 26px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.carte-connexion .meta { margin: 0; }
+.carte-connexion input { width: 100%; }
+
 @media (max-width: 900px) {
   .topbar { padding: 10px 16px; gap: 10px 24px; }
-  .brand p { display: none; }
 }
 
 @media (max-width: 640px) {

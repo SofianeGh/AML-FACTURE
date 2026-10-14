@@ -1,0 +1,11 @@
+services:
+  factures:
+    build: .
+    container_name: aml-factures
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+    # écoute seulement en local : le reverse proxy (HTTPS) du site AML s'y connecte
+    ports:
+      - "127.0.0.1:8000:8000"
