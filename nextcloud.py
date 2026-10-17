@@ -1,7 +1,7 @@
 """Client WebDAV minimal pour Nextcloud : lister/créer des dossiers, déposer un fichier."""
 import posixpath
 import xml.etree.ElementTree as ET
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 import requests
 
@@ -19,17 +19,33 @@ class NextcloudError(Exception):
     pass
 
 
-def base_url(url):
-    """Accepte « https://cloud.exemple.fr », « .../index.php » ou l'URL WebDAV complète."""
+# Début des adresses des pages de Nextcloud : ce qui précède est l'adresse du serveur
+# (Nextcloud peut être installé dans un sous-dossier, ex. https://exemple.fr/nextcloud).
+MARQUEURS_PAGES = ("/remote.php", "/index.php", "/apps/", "/ocs/", "/s/", "/f/", "/login")
+
+
+def _avec_schema(url):
     url = (url or "").strip()
+    return url if "://" in url or not url else "https://" + url
+
+
+def base_url(url):
+    """Adresse du serveur à partir de ce qu'on colle : « https://cloud.exemple.fr », l'adresse
+    WebDAV, ou celle d'une page ouverte dans le navigateur (« …/apps/files/files/123?dir=/Factures »)."""
+    url = _avec_schema(url)
     if not url:
         raise NextcloudError("Adresse du serveur Nextcloud manquante.")
-    if "://" not in url:
-        url = "https://" + url
-    for marqueur in ("/remote.php", "/index.php"):
-        if marqueur in url:
-            url = url.split(marqueur, 1)[0]
-    return url.rstrip("/")
+    parties = urlsplit(url)
+    chemin = parties.path
+    for marqueur in MARQUEURS_PAGES:
+        chemin = chemin.split(marqueur, 1)[0]
+    return f"{parties.scheme}://{parties.netloc}{chemin}".rstrip("/")
+
+
+def dossier_dans_url(url):
+    """Dossier ouvert dans la page Fichiers de Nextcloud (« ?dir=/2025-2026/Factures »), sinon None."""
+    valeurs = parse_qs(urlsplit(_avec_schema(url)).query).get("dir")
+    return (clean_path(valeurs[0]) or None) if valeurs else None
 
 
 def clean_path(path):
@@ -65,7 +81,10 @@ class Nextcloud:
         except requests.RequestException as exc:
             raise NextcloudError(f"Serveur Nextcloud injoignable : {exc}") from exc
         if resp.status_code == 401:
-            raise NextcloudError("Identifiants refusés par Nextcloud (401). Utilisez un mot de passe d'application.")
+            raise NextcloudError(
+                "Identifiants refusés par Nextcloud (401). Utilisez un mot de passe d'application, avec "
+                "l'identifiant que Nextcloud affiche à sa création (souvent le nom d'utilisateur plutôt que l'e-mail)."
+            )
         return resp
 
     def _propfind(self, path, depth):
@@ -76,7 +95,10 @@ class Nextcloud:
         if resp.status_code == 404:
             return None
         if resp.status_code != 207:
-            raise NextcloudError(f"Lecture du dossier impossible (HTTP {resp.status_code}).")
+            raise NextcloudError(
+                f"Lecture du dossier impossible (HTTP {resp.status_code}) : vérifiez l'adresse du serveur "
+                f"({self.base}) et l'identifiant."
+            )
         entrees = []
         for r in ET.fromstring(resp.content).iter(DAV_NS + "response"):
             href = unquote(urlsplit(r.findtext(DAV_NS + "href", "")).path)

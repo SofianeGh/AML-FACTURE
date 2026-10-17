@@ -47,9 +47,9 @@
         </select>
       </label>
       <div class="field">
-        <span>Dossier Nextcloud</span>
+        <span>Dossiers Nextcloud</span>
         <span class="inline">
-          <button id="btn-dossier" class="btn ghost" type="button" title="Choisir le dossier">
+          <button id="btn-dossier" class="btn ghost" type="button" title="Choisir le dossier de chaque PDF">
             <span id="dossier-courant">—</span>
           </button>
           <button id="btn-reglages" class="btn ghost icon" type="button" title="Connexion Nextcloud (administrateurs)" aria-label="Connexion Nextcloud" hidden>⚙</button>
@@ -71,6 +71,7 @@
       <span id="resume-global"></span>
       <button id="btn-tout-envoyer" class="btn primary" type="button">Tout envoyer sur Nextcloud</button>
     </div>
+    <datalist id="liste-conducteurs"></datalist>
 
     <div id="factures"></div>
   </main>
@@ -97,7 +98,13 @@
             <span class="suffix">.pdf</span>
           </span>
         </label>
+        <label class="nom-fichier">
+          <span>Conducteur <abbr title="obligatoire pour envoyer">*</abbr></span>
+          <input data-f="conducteur" type="text" list="liste-conducteurs" maxlength="60" placeholder="Nom du conducteur" autocomplete="off">
+        </label>
         <button data-f="envoyer" class="btn primary" type="button">Envoyer sur Nextcloud</button>
+        <a data-f="bilan" class="btn" href="#" target="_blank" rel="noopener" title="Toutes les informations de la facture, envoyé avec elle">Aperçu du bilan final</a>
+        <a data-f="ventes" class="btn" href="#" target="_blank" rel="noopener" title="Prix de vente et résultat de la course, envoyé avec la facture">Aperçu du bilan des ventes</a>
         <button data-f="csv" class="btn" type="button">Exporter CSV</button>
         <button data-f="retirer" class="btn ghost" type="button">Retirer</button>
         <span class="statut" data-f="statut" role="status"></span>
@@ -158,6 +165,7 @@
       <label class="field">
         <span>Adresse du serveur</span>
         <input name="nextcloud_url" type="text" placeholder="https://cloud.exemple.fr" required>
+        <small>Vous pouvez aussi coller l'adresse d'un dossier ouvert dans Nextcloud : ce dossier deviendra la destination des factures.</small>
       </label>
       <label class="field">
         <span>Identifiant</span>
@@ -166,7 +174,8 @@
       <label class="field">
         <span>Mot de passe d'application</span>
         <input name="nextcloud_password" type="password" autocomplete="current-password">
-        <small>Nextcloud → Paramètres personnels → Sécurité → « Créer un nouveau mot de passe d'application ».</small>
+        <small>Nextcloud → Paramètres personnels → Sécurité → « Créer un nouveau mot de passe d'application ».
+          Utilisez l'identifiant et le mot de passe que Nextcloud affiche à ce moment-là.</small>
       </label>
       <p class="erreur" data-f="erreur" role="alert"></p>
       <div class="dialog-actions">
@@ -178,7 +187,7 @@
 
   <dialog id="dlg-dossier">
     <div class="dialog-body">
-      <h2>Dossier de destination</h2>
+      <h2 data-f="titre">Dossier de destination</h2>
       <nav class="fil" data-f="fil" aria-label="Chemin"></nav>
       <ul class="liste-dossiers" data-f="liste"></ul>
       <form class="nouveau-dossier" data-f="form-nouveau">
@@ -191,6 +200,46 @@
         <button class="btn primary" type="button" data-f="choisir">Choisir ce dossier</button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="dlg-destinations">
+    <div class="dialog-body">
+      <h2>Destinations des PDF</h2>
+      <fieldset class="rangement">
+        <legend>Rangement</legend>
+        <label class="case">
+          <input type="radio" name="rangement" value="facture">
+          <span><strong>Un dossier par facture</strong>, créé dans le dossier principal et nommé
+            <code>AAAA_MM_DD - total TTC</code> (ex. <code>2026_10_03 - 959,74 €</code>) :
+            il contient la facture (duplicata), le bilan et tous les récapitulatifs.</span>
+        </label>
+        <label class="case">
+          <input type="radio" name="rangement" value="type">
+          <span><strong>Un dossier par type de PDF</strong>, choisi ci-dessous
+            (sans dossier choisi : dossier principal ; ↺ revient au dossier principal).</span>
+        </label>
+      </fieldset>
+      <ul class="liste-destinations" data-f="liste"></ul>
+      <p class="erreur" data-f="erreur" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" data-close>Fermer</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-note">
+    <form id="form-note" method="dialog">
+      <h2 data-f="titre">Note</h2>
+      <label class="field">
+        <span>Texte imprimé en haut du PDF</span>
+        <textarea name="texte" rows="5" maxlength="1000" placeholder="Ex. : courses pour la soirée d'intégration, payé par…"></textarea>
+      </label>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" data-f="effacer">Supprimer la note</button>
+        <button class="btn ghost" type="button" data-close>Annuler</button>
+        <button class="btn primary" type="submit">Enregistrer</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="dlg-mdp">

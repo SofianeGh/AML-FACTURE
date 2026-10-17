@@ -251,6 +251,38 @@ dialog input { width: 100%; }
 .nouveau-dossier { display: flex; gap: 8px; padding: 0 !important; }
 .nouveau-dossier input { flex: 1; }
 
+/* ---- destinations des PDF ---- */
+#dlg-destinations { width: min(640px, calc(100vw - 32px)); }
+.liste-destinations { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 7px; }
+.liste-destinations li { display: grid; grid-template-columns: 11em 1fr auto 1.6em; align-items: center; gap: 10px; padding: 7px 10px; }
+.liste-destinations li + li { border-top: 1px solid var(--border); }
+.liste-destinations li:first-child { background: var(--surface-2); }
+.liste-destinations .doc { font-weight: 600; font-size: 0.88rem; }
+.liste-destinations .chemin { font-size: 0.85rem; overflow-wrap: anywhere; }
+.liste-destinations .chemin.herite { color: var(--muted); font-style: italic; }
+.liste-destinations .btn { padding: 4px 10px; font-size: 0.85rem; }
+a.btn { display: inline-block; text-decoration: none; color: inherit; }
+.rangement { margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 7px; display: flex; flex-direction: column; gap: 8px; }
+.rangement legend { padding: 0 4px; font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+.rangement .case { align-items: flex-start; }
+.rangement .case input { margin-top: 3px; }
+.rangement code { font-size: 0.82rem; background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
+.liste-destinations.par-facture li:not(:first-child) { opacity: 0.45; pointer-events: none; }
+@media (max-width: 560px) {
+  .liste-destinations li { grid-template-columns: 1fr auto 1.6em; }
+  .liste-destinations .doc { grid-column: 1 / -1; }
+}
+
+/* ---- conducteur ---- */
+input[data-f="conducteur"] { width: 12em; }
+input.manquant { border-color: var(--ko); box-shadow: 0 0 0 2px var(--ko-bg); }
+.nom-fichier abbr { color: var(--ko); text-decoration: none; }
+
+/* ---- notes des PDF ---- */
+dialog textarea { width: 100%; resize: vertical; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; }
+.lien.avec-note { color: var(--accent-text); font-weight: 600; }
+.facture-actions .lien { align-self: center; }
+
 /* ---- session, alertes, comptes ---- */
 .brand .session { font-size: 0.82rem; }
 .brand .session #utilisateur { color: var(--text); font-weight: 600; }

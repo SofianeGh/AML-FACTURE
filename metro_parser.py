@@ -26,8 +26,9 @@ NUM = r"\d+(?:\.\d{3})*,\d+"
 RE_DATE = re.compile(r"Date facture\s*:\s*(\d{2})-(\d{2})-(\d{4})")
 RE_NUMERO = re.compile(r"N[º°]\s*FACTURE\s+(\S+?)[②\s]")
 RE_TICKET = re.compile(r"\((\d{3}-\d{6})\)")
+# Une ligne article peut commencer par un repère dans la colonne « MM » de METRO (ex. « M »).
 RE_ARTICLE = re.compile(
-    r"^\s*(?:(?P<ean>\d{8,14})\s+)?(?P<art>\d{6,8})\s(?P<milieu>.*?)\s+"
+    r"^\s*(?:(?P<mm>[^\d\s]{1,3})\s+)?(?:(?P<ean>\d{8,14})\s+)?(?P<art>\d{6,8})\s(?P<milieu>.*?)\s+"
     rf"(?P<prix>{NUM})\s+(?P<colis>\d+)\s+(?P<qte>{NUM}|\d+)\s+"
     rf"(?P<montant>{NUM})(?P<neg>-)?\s+(?P<tva>[A-Z])\b(?P<fin>.*)$"
 )

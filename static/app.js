@@ -178,6 +178,8 @@ function recalc(f) {
   const net = benefice - cadeau;
   f.q("benefice").textContent = eur.format(benefice);
   f.q("cadeau").textContent = eur.format(-cadeau);
+  const conducteur = f.q("conducteur").value.trim();
+  f.q("cadeau").previousElementSibling.textContent = `Cadeau conducteur${conducteur ? ` (${conducteur})` : ""}`;
   f.q("benefice-net").textContent = eur.format(net);
   f.q("benefice").parentElement.classList.toggle("benefice", !cadeau);
   f.q("benefice").classList.toggle("negatif", benefice < 0);
@@ -306,7 +308,46 @@ function champCategorie(f, i, ligne) {
   return select;
 }
 
-// Lignes « par catégorie » sous le total, avec un bouton d'aperçu du PDF de la catégorie
+// ---------------------------------------------------------------- notes des PDF
+
+// Note imprimée dans un PDF (bilan ou récap d'une catégorie), propre à cette facture
+const dlgNote = $("#dlg-note");
+const formNote = $("#form-note");
+let noteCible = null; // { f, doc, lien }
+
+function lienNote(f, doc, libelle) {
+  const lien = el("button", { class: "lien", type: "button", title: `Note imprimée dans le PDF ${libelle}` });
+  const maj = () => {
+    lien.textContent = f.notes[doc] ? "modifier la note ✎" : "ajouter une note";
+    lien.classList.toggle("avec-note", Boolean(f.notes[doc]));
+  };
+  lien.addEventListener("click", () => {
+    noteCible = { f, doc, maj };
+    $("[data-f=titre]", formNote).textContent = `Note — ${libelle}`;
+    formNote.texte.value = f.notes[doc] || "";
+    dlgNote.showModal();
+    formNote.texte.focus();
+  });
+  maj();
+  return lien;
+}
+
+formNote.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const { f, doc, maj } = noteCible;
+  const texte = formNote.texte.value.trim();
+  if (texte) f.notes[doc] = texte;
+  else delete f.notes[doc];
+  maj();
+  dlgNote.close();
+});
+
+$("[data-f=effacer]", formNote).addEventListener("click", () => {
+  formNote.texte.value = "";
+  formNote.requestSubmit();
+});
+
+// Lignes « par catégorie » sous le total, avec l'aperçu du PDF de la catégorie et sa note
 function lignesCategories(f) {
   f.lignesCat = {};
   const rows = Object.entries(CATEGORIES).map(([cat, libelle]) => {
@@ -325,7 +366,8 @@ function lignesCategories(f) {
     });
     const tr = el("tr", { class: "ligne-cat" },
       el("td", { colspan: "9" },
-        el("span", { class: `pastille cat-${cat}` }, libelle), " ", n, " · ", lien),
+        el("span", { class: `pastille cat-${cat}` }, libelle), " ", n, " · ", lien, " · ",
+        lienNote(f, cat, `Récap ${libelle}`)),
       montant);
     f.lignesCat[cat] = { tr, n, montant };
     return tr;
@@ -407,6 +449,22 @@ function renderFacture(f) {
   f.q("envoyer").addEventListener("click", () => envoyer(f));
   f.q("csv").addEventListener("click", () => exporterCSV(f));
   f.q("retirer").addEventListener("click", () => retirer(f));
+  // liens ordinaires vers les PDF, adresse calculée au clic (prix, catégories, conducteur à jour)
+  for (const [doc, libelle, url] of [["bilan", "Bilan final", urlBilan], ["ventes", "Bilan des ventes", urlVentes]]) {
+    f.q(doc).addEventListener("click", (e) => {
+      if (!/^\d{2}-\d{2}-\d{4}$/.test(f.q("nom").value.trim())) {
+        e.preventDefault();
+        statut(f, "Date attendue au format JJ-MM-AAAA.", "ko");
+        return;
+      }
+      f.q(doc).href = url(f);
+    });
+    f.q(doc).after(lienNote(f, doc, libelle));
+  }
+  f.q("conducteur").addEventListener("input", () => {
+    f.q("conducteur").classList.remove("manquant");
+    recalc(f); // libellé « Cadeau conducteur (…) »
+  });
   recalc(f);
   return node;
 }
@@ -447,6 +505,7 @@ async function ajouterFichiers(fichiers) {
         pieces: data.lignes.map((l) => store.get(`pieces:${l.article}`, 1)),
         prix: data.lignes.map((l) => store.get(`prix:${l.article}`, null)),
         categories: data.lignes.map((l) => (store.get(`local:${l.article}`, false) ? "local" : "vente")),
+        notes: {}, // note de chaque PDF : { bilan: "…", ventes: "…", event: "…" }
       };
       state.factures.push(f);
       attente.replaceWith(renderFacture(f));
@@ -472,7 +531,19 @@ function statut(f, texte, type = "") {
   s.className = `statut ${type}`;
 }
 
-// Facture + nom JJ-MM-AAAA.pdf + catégorie de chaque ligne ; null si la date est invalide
+// Le conducteur est obligatoire pour envoyer : case signalée en rouge s'il manque
+function conducteurDe(f, signaler = true) {
+  const champ = f.q("conducteur");
+  const nom = champ.value.trim().replace(/\s+/g, " ");
+  if (!nom && signaler) {
+    champ.classList.add("manquant");
+    statut(f, "Indiquez le nom du conducteur avant d'envoyer.", "ko");
+    champ.focus();
+  }
+  return nom;
+}
+
+// Facture + nom JJ-MM-AAAA.pdf + conducteur + catégorie de chaque ligne ; null s'il manque quelque chose
 function formulaire(f) {
   const date = f.q("nom").value.trim();
   if (!/^\d{2}-\d{2}-\d{4}$/.test(date)) {
@@ -480,11 +551,30 @@ function formulaire(f) {
     f.q("nom").focus();
     return null;
   }
+  const conducteur = conducteurDe(f);
+  if (!conducteur) return null;
   const fd = new FormData();
   fd.append("fichier", f.file, f.file.name);
   fd.append("nom", `${date}.pdf`);
+  fd.append("conducteur", conducteur);
   fd.append("categories", JSON.stringify(f.categories));
+  fd.append("vente", JSON.stringify(donneesVente(f)));
+  fd.append("notes", JSON.stringify(f.notes));
   return fd;
+}
+
+// Choix de vente pour le PDF « Bilan des ventes » : pièces, prix de vente et prix optimal
+// de chaque ligne (null hors catégorie Vente), avec les réglages utilisés
+function donneesVente(f) {
+  const r = reglages();
+  const vente = { pieces: [...f.pieces], prix: [], optimal: [] };
+  f.data.lignes.forEach((ligne, i) => {
+    const c = calcLigne(ligne, f.pieces[i], f.categories[i] === "vente", f.prix[i], r);
+    vente.prix.push(c.pv);
+    vente.optimal.push(c.optimal);
+  });
+  vente.reglages = { marge: margeInput.value, margeType: margeType.value, taxe: taxeInput.value, arrondi: arrondiSel.value };
+  return vente;
 }
 
 async function envoyer(f) {
@@ -494,18 +584,25 @@ async function envoyer(f) {
     besoinNextcloud();
     return false;
   }
-  fd.append("dossier", state.config.dossier);
   const bouton = f.q("envoyer");
   bouton.disabled = true;
   statut(f, "Envoi en cours…");
   try {
     const res = await api("api/nextcloud/envoyer", { method: "POST", body: fd });
     const recaps = res.recaps.map((r) => r.nom.split(" - ").pop().replace(/\.pdf$/, ""));
-    statut(f, [
+    const nomFichier = (chemin) => chemin.split("/").pop();
+    statut(f, (res.dossier ? [
+      `✓ Dossier ${res.dossier}`,
+      res.deja_present ? "facture déjà présente" : `facture ${nomFichier(res.chemin)}`,
+      `bilan final, bilan des ventes et PDF ${recaps.join(", ")}`,
+    ] : [
       res.deja_present ? `Facture déjà présente : ${res.chemin}` : `✓ Envoyé : ${res.chemin}`,
+      `bilan final : ${res.bilan.chemin}`,
+      `bilan des ventes : ${res.ventes.chemin}`,
       `PDF par catégorie : ${recaps.join(", ")}`,
-      res.supprimes.length && `anciens PDF supprimés : ${res.supprimes.join(", ")}`,
-    ].filter(Boolean).join(" · "), "ok");
+    ]).concat(res.supprimes.length ? [`anciens PDF supprimés : ${res.supprimes.join(", ")}`] : [])
+      .join(" · "), "ok");
+    retenirConducteur(conducteurDe(f, false));
     return true;
   } catch (e) {
     statut(f, e.message, "ko");
@@ -517,8 +614,44 @@ async function envoyer(f) {
 
 // Adresse du PDF d'une catégorie, tel qu'il sera envoyé (le serveur garde la facture analysée)
 function urlApercu(f, cat) {
-  const params = new URLSearchParams({ nom: `${f.q("nom").value.trim()}.pdf`, categories: f.categories.join(",") });
+  const params = new URLSearchParams({
+    nom: `${f.q("nom").value.trim()}.pdf`, categories: f.categories.join(","), note: f.notes[cat] || "",
+    conducteur: conducteurDe(f, false),
+  });
   return `api/recap/${f.data.id}/${cat}?${params}`;
+}
+
+function urlBilan(f) {
+  const params = new URLSearchParams({
+    nom: `${f.q("nom").value.trim()}.pdf`,
+    categories: f.categories.join(","),
+    note: f.notes.bilan || "",
+    conducteur: conducteurDe(f, false),
+  });
+  return `api/bilan/${f.data.id}?${params}`;
+}
+
+function urlVentes(f) {
+  const params = new URLSearchParams({
+    nom: `${f.q("nom").value.trim()}.pdf`,
+    categories: f.categories.join(","),
+    vente: JSON.stringify(donneesVente(f)),
+    note: f.notes.ventes || "",
+    conducteur: conducteurDe(f, false),
+  });
+  return `api/ventes/${f.data.id}?${params}`;
+}
+
+// Noms de conducteurs déjà utilisés, proposés dans la case (partagés entre les membres)
+function retenirConducteur(nom) {
+  if (!nom) return;
+  const liste = store.get("conducteurs", []);
+  store.set("conducteurs", [nom, ...liste.filter((n) => n.toLowerCase() !== nom.toLowerCase())].slice(0, 30));
+  afficherConducteurs();
+}
+
+function afficherConducteurs() {
+  $("#liste-conducteurs").replaceChildren(...store.get("conducteurs", []).map((nom) => el("option", { value: nom })));
 }
 
 $("#btn-tout-envoyer").addEventListener("click", async () => {
@@ -583,7 +716,9 @@ document.querySelectorAll("dialog [data-close]").forEach((b) =>
 
 function majDossier() {
   const c = state.config;
-  $("#dossier-courant").textContent = c?.configure ? `/${c.dossier}`
+  const perso = c ? Object.values(c.destinations).filter(Boolean).length : 0;
+  const detail = c?.rangement === "facture" ? " · 1 dossier par facture" : perso ? ` (+${perso})` : "";
+  $("#dossier-courant").textContent = c?.configure ? `/${c.dossier}${detail}`
     : state.moi?.admin ? "Configurer Nextcloud…" : "Nextcloud non configuré";
 }
 
@@ -630,11 +765,74 @@ formReglages.addEventListener("submit", async (e) => {
 
 $("#btn-reglages").addEventListener("click", ouvrirReglages);
 
+// ---------------------------------------------------------------- destinations des PDF
+
+// Chaque type de PDF (facture, bilan, récap de chaque catégorie) peut avoir son dossier ;
+// sinon il va dans le dossier principal.
+const dlgDestinations = $("#dlg-destinations");
+
+function afficherDestinations() {
+  const c = state.config;
+  const ligne = (cle, libelle, chemin, propre) => {
+    const changer = el("button", { class: "btn", type: "button" }, "Changer");
+    changer.addEventListener("click", () => ouvrirDossier(cle));
+    const li = el("li", {},
+      el("span", { class: "doc" }, libelle),
+      el("span", { class: propre ? "chemin" : "chemin herite" },
+        propre ? `/${chemin}` : `dossier principal (/${c.dossier})`),
+      changer);
+    if (cle !== "principal" && propre) {
+      const reset = el("button", { class: "reset", type: "button", title: "Revenir au dossier principal" }, "↺");
+      reset.addEventListener("click", async () => {
+        try {
+          state.config = await postJSON("api/config", { destinations: { [cle]: "" } });
+          majDossier();
+          afficherDestinations();
+        } catch (err) {
+          dlgDestinations.querySelector("[data-f=erreur]").textContent = err.message;
+        }
+      });
+      li.append(reset);
+    }
+    return li;
+  };
+  const liste = dlgDestinations.querySelector("[data-f=liste]");
+  liste.replaceChildren(
+    ligne("principal", "Dossier principal", c.dossier, true),
+    ...Object.entries(c.documents).map(([cle, libelle]) =>
+      ligne(cle, libelle, c.destinations[cle], Boolean(c.destinations[cle]))),
+  );
+  // un dossier par facture : les dossiers par type ne servent pas
+  liste.classList.toggle("par-facture", c.rangement === "facture");
+  dlgDestinations.querySelector(`input[name=rangement][value=${c.rangement}]`).checked = true;
+}
+
+dlgDestinations.querySelectorAll("input[name=rangement]").forEach((radio) =>
+  radio.addEventListener("change", async () => {
+    const erreur = dlgDestinations.querySelector("[data-f=erreur]");
+    erreur.textContent = "";
+    try {
+      state.config = await postJSON("api/config", { rangement: radio.value });
+      majDossier();
+      afficherDestinations();
+    } catch (err) {
+      erreur.textContent = err.message;
+    }
+  }));
+
+function ouvrirDestinations() {
+  if (!state.config?.configure) return besoinNextcloud();
+  dlgDestinations.querySelector("[data-f=erreur]").textContent = "";
+  afficherDestinations();
+  dlgDestinations.showModal();
+}
+
 // ---------------------------------------------------------------- choix du dossier
 
 const dlgDossier = $("#dlg-dossier");
 const dq = (k) => dlgDossier.querySelector(`[data-f="${k}"]`);
 let cheminCourant = "";
+let cibleDossier = "principal"; // "principal" ou un type de PDF
 
 const joindre = (...parts) => parts.filter(Boolean).join("/");
 const parent = (chemin) => chemin.split("/").slice(0, -1).join("/");
@@ -672,10 +870,13 @@ async function chargerDossier(chemin) {
   }) : [el("li", { class: "vide" }, "Aucun sous-dossier")]));
 }
 
-async function ouvrirDossier() {
+async function ouvrirDossier(cible = "principal") {
   if (!state.config?.configure) return besoinNextcloud();
+  cibleDossier = cible;
+  const c = state.config;
+  dq("titre").textContent = cible === "principal" ? "Dossier principal" : `Dossier : ${c.documents[cible]}`;
   dlgDossier.showModal();
-  await chargerDossier(state.config.dossier);
+  await chargerDossier((cible !== "principal" && c.destinations[cible]) || c.dossier);
 }
 
 dq("form-nouveau").addEventListener("submit", async (e) => {
@@ -692,15 +893,18 @@ dq("form-nouveau").addEventListener("submit", async (e) => {
 
 dq("choisir").addEventListener("click", async () => {
   try {
-    state.config = await postJSON("api/config", { dossier: cheminCourant });
+    state.config = await postJSON("api/config", cibleDossier === "principal"
+      ? { dossier: cheminCourant }
+      : { destinations: { [cibleDossier]: cheminCourant } });
     majDossier();
+    if (dlgDestinations.open) afficherDestinations();
     dlgDossier.close();
   } catch (err) {
     dq("erreur").textContent = err.message;
   }
 });
 
-$("#btn-dossier").addEventListener("click", ouvrirDossier);
+$("#btn-dossier").addEventListener("click", ouvrirDestinations);
 
 // ---------------------------------------------------------------- session et comptes
 
@@ -800,6 +1004,7 @@ async function demarrer() {
   state.config = config;
   store.valeurs = preferences;
   afficherReglages();
+  afficherConducteurs();
   majSession();
   majDossier();
 }
