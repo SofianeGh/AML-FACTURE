@@ -2,6 +2,6 @@
 
 Lancer un seul processus (plusieurs threads) : les aperçus PDF utilisent un cache en mémoire.
 """
-from app import app
+from factures import create_app
 
-application = app
+app = application = create_app()

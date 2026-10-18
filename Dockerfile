@@ -21,4 +21,4 @@ EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/connexion')"
 
-CMD ["python", "app.py"]
+CMD ["python", "-m", "factures"]

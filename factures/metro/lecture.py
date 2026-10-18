@@ -9,7 +9,7 @@ pivotés et gros corps), on reconstruit chaque ligne de texte, puis on lit :
     l'article précédent,
   - le récapitulatif TVA (code -> taux, HT, TVA, TTC) pour contrôler le résultat.
 
-Usage en ligne de commande :  python metro_parser.py facture.pdf
+Usage en ligne de commande :  python -m factures.metro.lecture facture.pdf
 """
 import re
 import sys

@@ -5,7 +5,7 @@ Application web de l'**AML** (Association des Informaticiens Lyonnais) pour l'é
 avec marge, classe chaque dépense par catégorie et archive le tout sur **Nextcloud**.
 
 Elle est prévue pour être hébergée sur le site de l'AML, avec un compte par membre :
-voir **[DEPLOIEMENT.md](DEPLOIEMENT.md)**.
+voir **[docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md)**.
 
 ## Fonctionnalités
 
@@ -28,7 +28,7 @@ voir **[DEPLOIEMENT.md](DEPLOIEMENT.md)**.
 ## Mise en ligne
 
 Docker, Python seul ou hébergement « Python App », reverse proxy HTTPS, sous-domaine ou
-sous-dossier du site : tout est dans **[DEPLOIEMENT.md](DEPLOIEMENT.md)**.
+sous-dossier du site : tout est dans **[docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md)**.
 
 ## Lancement en local (Windows)
 
@@ -157,20 +157,55 @@ git) ; le mot de passe n'est jamais renvoyé au navigateur. Seul un administrate
 
 ## Structure du projet
 
-| Fichier | Rôle |
-|---|---|
-| `app.py` | serveur web Flask et API (connexion, sécurité, factures, Nextcloud) |
-| `stockage.py` | base SQLite : comptes, réglages Nextcloud, préférences partagées |
-| `manage.py` | gestion des comptes en ligne de commande |
-| `metro_parser.py` | lecture des factures METRO (`python metro_parser.py facture.pdf` pour tester) |
-| `nextcloud.py` | client WebDAV Nextcloud |
-| `recap_pdf.py` | PDF : récapitulatif par catégorie, bilan final, bilan des ventes |
-| `static/` | interface (HTML, CSS, JavaScript), page de connexion |
-| `wsgi.py`, `passenger_wsgi.py` | points d'entrée pour les serveurs WSGI et les hébergeurs « Python App » |
-| `Dockerfile`, `docker-compose.yml`, `.env.example` | déploiement Docker |
-| `start.bat` | installation et lancement sous Windows |
-| `requirements.txt` | dépendances Python (Flask, pdfplumber, reportlab, requests, waitress) |
-| `DEPLOIEMENT.md` | guide de mise en ligne |
+```
+AML-FACTURE/
+├── factures/                  ← le code de l'application (paquet Python)
+│   ├── __init__.py            ← crée l'application Flask (create_app)
+│   ├── __main__.py            ← lance le serveur : python -m factures
+│   ├── config.py              ← variables d'environnement, dossier de données, clé secrète
+│   ├── securite.py            ← connexion obligatoire, anti-CSRF, en-têtes, blocage des essais
+│   ├── commun.py              ← erreurs, journal, réglages Nextcloud
+│   ├── stockage.py            ← base SQLite : comptes, réglages, préférences partagées
+│   ├── routes/
+│   │   ├── comptes.py         ← connexion, mot de passe, comptes
+│   │   ├── factures.py        ← analyse, aperçus PDF, envoi sur Nextcloud
+│   │   └── reglages.py        ← connexion Nextcloud, dossiers, préférences
+│   ├── metro/lecture.py       ← lecture des factures METRO
+│   ├── nextcloud/client.py    ← client WebDAV Nextcloud
+│   ├── pdf/                   ← commun, recap, bilan_final, bilan_ventes
+│   ├── templates/             ← index.html, connexion.html
+│   └── static/
+│       ├── css/style.css
+│       └── js/                ← main, outils, api, calculs, facture, nextcloud, dossiers, comptes, connexion
+├── tests/                     ← tests pytest (factures d'exemple dans tests/factures_exemple/, hors git)
+├── docs/DEPLOIEMENT.md        ← guide de mise en ligne
+├── manage.py                  ← gestion des comptes en ligne de commande
+├── wsgi.py, passenger_wsgi.py ← points d'entrée WSGI et hébergeurs « Python App »
+├── Dockerfile, docker-compose.yml, .env.example
+├── start.bat                  ← installation et lancement sous Windows
+├── requirements.txt           ← dépendances (Flask, pdfplumber, reportlab, requests, waitress)
+└── requirements-dev.txt       ← + pytest, pyflakes
+```
+
+Pour tester la lecture d'une facture en ligne de commande :
+
+```bash
+.venv\Scripts\python.exe -m factures.metro.lecture facture.pdf
+```
+
+## Tests
+
+Les tests utilisent un faux Nextcloud en mémoire. Les tests qui lisent de vraies factures
+METRO ont besoin de PDF dans `tests/factures_exemple/` (non versionnés car ce sont de vraies
+factures) ; sans eux, ces tests sont ignorés.
+
+```bash
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
+
+```bash
+.venv\Scripts\python.exe -m pytest
+```
 
 ## Auteur
 

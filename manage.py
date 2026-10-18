@@ -14,12 +14,9 @@ import argparse
 import getpass
 import os
 import sys
-from pathlib import Path
 
-from stockage import ErreurCompte, Stockage
-
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = Path(os.environ.get("DATA_DIR", ROOT / "data")).resolve()
+from factures.config import dossier_donnees
+from factures.stockage import ErreurCompte, Stockage
 
 
 def demander_mot_de_passe():
@@ -46,7 +43,7 @@ def main(argv=None):
     sous.add_parser("initialiser", help="créer le premier administrateur si besoin")
     args = parser.parse_args(argv)
 
-    stockage = Stockage(DATA_DIR / "aml-factures.db")
+    stockage = Stockage(dossier_donnees() / "aml-factures.db")
     try:
         if args.commande == "ajouter-utilisateur":
             nom = stockage.ajouter_utilisateur(args.nom, demander_mot_de_passe(), args.admin)

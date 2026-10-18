@@ -5,3 +5,6 @@ data/
 .git/
 *.pdf
 config.json*
+tests/
+docs/
+requirements-dev.txt

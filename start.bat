@@ -12,7 +12,7 @@ if not exist ".venv\Scripts\python.exe" (
 rem usage local en http : cookie de session non "Secure"
 set COOKIE_SECURE=0
 start "" http://localhost:5000
-".venv\Scripts\python.exe" app.py
+".venv\Scripts\python.exe" -m factures
 goto :eof
 
 :erreur

@@ -44,7 +44,7 @@ elles partent sur Nextcloud.
 | `SECRET_KEY` | générée | clé de session fixe (facultative) |
 | `ADMIN_UTILISATEUR` / `ADMIN_MOT_DE_PASSE` | — | crée le premier administrateur si aucun compte n'existe |
 
-Lancer **un seul processus** (avec plusieurs threads, ce que fait `python app.py`) :
+Lancer **un seul processus** (avec plusieurs threads, ce que fait `python -m factures`) :
 l'aperçu des PDF par catégorie garde les factures analysées en mémoire.
 
 ## Option A — Docker (recommandé)
@@ -96,7 +96,7 @@ After=network.target
 User=aml
 WorkingDirectory=/opt/aml-factures
 Environment=TRUST_PROXY=1 PORT=8000 DATA_DIR=/opt/aml-factures/data
-ExecStart=/opt/aml-factures/.venv/bin/python app.py
+ExecStart=/opt/aml-factures/.venv/bin/python -m factures
 Restart=always
 
 [Install]
