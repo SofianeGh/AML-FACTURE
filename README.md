@@ -176,6 +176,8 @@ git) ; le mot de passe n'est jamais renvoyé au navigateur. Seul un administrate
 
 Fait par **[Sofiane Abichou](https://github.com/SofianeGh)** — Local Stock, mandat 2025/2026.
 
+Réalisé avec l'aide et sur la base de l'ancien projet de **[Mathieu Flouret](https://github.com/megat69)** — Local Stock, mandat 2024/2026.
+
 ## Licence
 
 Distribué sous licence MIT : voir [LICENSE](LICENSE).
