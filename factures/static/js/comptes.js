@@ -4,9 +4,13 @@ import { $, el, state } from "./outils.js";
 
 export function majSession() {
   const moi = state.moi;
+  $("#btn-reglages").hidden = !moi.admin;
+  if (moi.libre) {  // connexion désactivée sur le serveur (CONNEXION=0) : ni compte, ni déconnexion
+    $(".session").textContent = "Accès libre (connexion désactivée)";
+    return;
+  }
   $("#utilisateur").textContent = moi.admin ? `${moi.nom} (admin)` : moi.nom;
   $("#liens-admin").hidden = !moi.admin;
-  $("#btn-reglages").hidden = !moi.admin;
 }
 
 $("#btn-deconnexion").addEventListener("click", async () => {

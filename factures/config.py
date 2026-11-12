@@ -31,6 +31,12 @@ def env_bool(nom, defaut):
     return defaut if valeur is None else valeur.strip().lower() in ("1", "true", "oui", "yes", "on")
 
 
+def connexion_active():
+    """CONNEXION=0 : pas d'écran de connexion, tout le monde a les droits d'administrateur.
+    À réserver à un serveur privé (réseau local, VPN). Activée par défaut."""
+    return env_bool("CONNEXION", True)
+
+
 def cle_secrete(dossier):
     """SECRET_KEY, sinon une clé générée une fois et gardée dans le dossier de données
     (les sessions survivent aux redémarrages)."""

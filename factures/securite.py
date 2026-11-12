@@ -6,11 +6,15 @@ from functools import wraps
 
 from flask import g, redirect, request, session, url_for
 
-from .commun import RequeteInvalide, erreur, stockage
+from .commun import RequeteInvalide, erreur, log, stockage
+from .config import connexion_active
 from .nextcloud import NextcloudError
 from .stockage import ErreurCompte
 
 PAGES_PUBLIQUES = {"comptes.page_connexion", "comptes.connexion", "static"}
+
+# Utilisateur de toutes les requêtes quand la connexion est désactivée (CONNEXION=0)
+UTILISATEUR_LIBRE = {"nom": "Local Stock", "admin": True, "libre": True}
 
 
 def utilisateur_courant():
@@ -48,6 +52,9 @@ def noter_echec(ip):
 
 def installer(app):
     """Contrôles avant chaque requête, en-têtes de sécurité et réponses d'erreur."""
+    libre = not connexion_active()
+    if libre:
+        log.warning("Connexion désactivée (CONNEXION=0) : l'application est ouverte à tous ceux qui y ont accès.")
 
     @app.before_request
     def _controles():
@@ -55,6 +62,11 @@ def installer(app):
         # (un autre site ne peut pas ajouter cet en-tête ; les cookies SameSite=Lax complètent).
         if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("X-Requested-With") != "fetch":
             return erreur("Requête refusée.", 403)
+        if libre:
+            g.utilisateur = dict(UTILISATEUR_LIBRE)
+            if request.endpoint == "comptes.page_connexion":
+                return redirect(url_for("factures.index"))
+            return None
         if request.endpoint in PAGES_PUBLIQUES:
             return None
         g.utilisateur = utilisateur_courant()
