@@ -66,7 +66,22 @@ CREATE TABLE IF NOT EXISTS treso_justificatifs (
 );
 CREATE INDEX IF NOT EXISTS treso_justificatifs_operation ON treso_justificatifs (operation_id);
 CREATE INDEX IF NOT EXISTS treso_justificatifs_lien ON treso_justificatifs (lien_type, lien_id);
+-- transaction répartie sur plusieurs classeurs (versement HelloAsso, TPE…) : la somme des parts
+-- vaut le montant de la transaction, qui n'a alors pas de classeur à elle
+CREATE TABLE IF NOT EXISTS treso_ventilations (
+    id INTEGER PRIMARY KEY,
+    operation_id INTEGER NOT NULL,
+    classeur_id INTEGER NOT NULL,
+    montant INTEGER NOT NULL,              -- en centimes ; peut être de signe opposé (ex. frais du TPE)
+    commentaire TEXT NOT NULL DEFAULT '',
+    ordre INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS treso_ventilations_operation ON treso_ventilations (operation_id);
+CREATE INDEX IF NOT EXISTS treso_ventilations_classeur ON treso_ventilations (classeur_id);
 """
+PARTS_MAX = 30
+# transaction sans classeur ni répartition = « à classer »
+SANS_CLASSEMENT = "classeur_id IS NULL AND id NOT IN (SELECT operation_id FROM treso_ventilations)"
 
 # Données de départ d'une base neuve (les mêmes qu'AML Trésorerie)
 CATEGORIES_DEFAUT = [("Événements", False), ("Fonctionnement", False), ("Local", False), ("Non Catégorisé", False),
@@ -153,7 +168,8 @@ class Tresorerie:
         with self._db() as db:
             rows = db.execute(
                 "SELECT cl.id, cl.nom, c.id AS categorie_id, c.nom AS categorie_nom, c.ordre, "
-                "(SELECT COUNT(*) FROM treso_operations o WHERE o.classeur_id = cl.id) AS nb "
+                "(SELECT COUNT(*) FROM treso_operations o WHERE o.classeur_id = cl.id) "
+                "+ (SELECT COUNT(*) FROM treso_ventilations v WHERE v.classeur_id = cl.id) AS nb "
                 "FROM treso_classeurs cl JOIN treso_categories c ON c.id = cl.categorie_id "
                 "WHERE cl.mandat_id = ?", (mandat_id,)).fetchall()
         rows = sorted(rows, key=lambda r: (r["ordre"], _cle_tri(r["nom"])))
@@ -173,25 +189,39 @@ class Tresorerie:
 
     def supprimer_classeur(self, id_):
         with self._db() as db:
-            if db.execute("SELECT 1 FROM treso_operations WHERE classeur_id = ? LIMIT 1", (id_,)).fetchone():
+            if db.execute("SELECT 1 FROM treso_operations WHERE classeur_id = ? UNION ALL "
+                          "SELECT 1 FROM treso_ventilations WHERE classeur_id = ? LIMIT 1", (id_, id_)).fetchone():
                 raise ErreurDonnees("Ce classeur contient des transactions : reclassez-les avant de le supprimer.")
             if not db.execute("DELETE FROM treso_classeurs WHERE id = ?", (id_,)).rowcount:
                 raise ErreurDonnees("Classeur introuvable.")
 
     # -- transactions ------------------------------------------------------------
+    @staticmethod
+    def _parts(db, where, params):
+        """{id de transaction: [parts]} pour les transactions réparties sur plusieurs classeurs."""
+        parts = {}
+        for v in db.execute("SELECT v.operation_id, v.classeur_id, v.montant, v.commentaire FROM treso_ventilations v "
+                            f"JOIN treso_operations o ON o.id = v.operation_id WHERE {where} "
+                            "ORDER BY v.operation_id, v.ordre, v.id", params):
+            parts.setdefault(v["operation_id"], []).append(
+                {"classeur_id": v["classeur_id"], "montant": euros(v["montant"]), "commentaire": v["commentaire"]})
+        return parts
+
     def operations(self, mandat_id, mois=None, classeur_id=None, a_classer=False):
-        """Transactions du mandat (les plus récentes d'abord), avec leurs justificatifs."""
+        """Transactions du mandat (les plus récentes d'abord), avec leurs justificatifs et leurs parts
+        si elles sont réparties. Avec `classeur_id` : celles classées dedans ou dont une part y est, et
+        « montant_classeur », la somme qui revient à ce classeur."""
         sql = ("SELECT id, date, libelle, nature, montant, classeur_id, commentaire FROM treso_operations "
                "WHERE mandat_id = ?")
         params = [mandat_id]
         if classeur_id:
-            sql += " AND classeur_id = ?"
-            params.append(classeur_id)
+            sql += " AND (classeur_id = ? OR id IN (SELECT operation_id FROM treso_ventilations WHERE classeur_id = ?))"
+            params += [classeur_id, classeur_id]
         if mois:
             sql += " AND substr(date, 1, 7) = ?"
             params.append(mois)
         if a_classer:
-            sql += " AND classeur_id IS NULL"
+            sql += f" AND {SANS_CLASSEMENT}"
         with self._db() as db:
             rows = db.execute(sql + " ORDER BY date DESC, id DESC", params).fetchall()
             justificatifs = {}
@@ -200,19 +230,29 @@ class Tresorerie:
                                 (mandat_id,)):
                 justificatifs.setdefault(j["operation_id"], []).append(
                     {"id": j["id"], "nom": j["nom"], "lien_type": j["lien_type"], "lien_id": j["lien_id"]})
-        return [{**dict(r), "montant": euros(r["montant"]), "justificatifs": justificatifs.get(r["id"], [])}
-                for r in rows]
+            parts = self._parts(db, "o.mandat_id = ?", (mandat_id,))
+        resultat = []
+        for r in rows:
+            op = {**dict(r), "montant": euros(r["montant"]), "justificatifs": justificatifs.get(r["id"], []),
+                  "ventilations": parts.get(r["id"], [])}
+            if classeur_id:
+                op["montant_classeur"] = op["montant"] if r["classeur_id"] == classeur_id else round(
+                    sum(p["montant"] for p in op["ventilations"] if p["classeur_id"] == classeur_id), 2)
+            resultat.append(op)
+        return resultat
 
     def operation(self, id_):
-        """Une transaction avec les noms de son mandat, de sa catégorie et de son classeur, ou None."""
+        """Une transaction avec les noms de son mandat, de sa catégorie et de son classeur (et ses parts), ou None."""
         with self._db() as db:
             row = db.execute(
                 "SELECT o.*, m.nom AS mandat, c.nom AS categorie, cl.nom AS classeur FROM treso_operations o "
                 "JOIN treso_mandats m ON m.id = o.mandat_id LEFT JOIN treso_classeurs cl ON cl.id = o.classeur_id "
                 "LEFT JOIN treso_categories c ON c.id = cl.categorie_id WHERE o.id = ?", (id_,)).fetchone()
-        if row is None:
-            return None
-        return {**{k: row[k] for k in row.keys() if k != "empreinte"}, "montant": euros(row["montant"])}
+            if row is None:
+                return None
+            parts = self._parts(db, "o.id = ?", (id_,)).get(id_, [])
+        return {**{k: row[k] for k in row.keys() if k != "empreinte"}, "montant": euros(row["montant"]),
+                "ventilations": parts}
 
     def importer(self, mandat_id, lignes):
         """Ajoute les lignes d'un relevé ; réimporter le même fichier ne crée pas de doublon.
@@ -231,23 +271,67 @@ class Tresorerie:
                     (mandat_id, l.date, l.libelle, l.nature, centimes(l.montant), empreinte, quand)).rowcount
         return ajoutees
 
-    def modifier_operation(self, id_, classeur_id, commentaire, libelle, auteur):
-        """Classe la transaction (classeur du même mandat, ou aucun) ; un motif vide garde l'ancien."""
+    @staticmethod
+    def _verifier_classeur(db, classeur_id, mandat_id):
+        if classeur_id is not None and db.execute("SELECT 1 FROM treso_classeurs WHERE id = ? AND mandat_id = ?",
+                                                  (classeur_id, mandat_id)).fetchone() is None:
+            raise ErreurDonnees("Ce classeur n'appartient pas au mandat de la transaction.")
+
+    def modifier_operation(self, id_, classeur_id, commentaire, libelle, auteur, ventilations=None):
+        """Classe la transaction dans un classeur (ou aucun), ou la répartit sur plusieurs : `ventilations`
+        = [(classeur_id, montant en centimes, commentaire)], au moins 2 parts dont la somme vaut le montant
+        de la transaction. Sans répartition, les parts existantes sont retirées. Un motif vide garde l'ancien."""
         with self._db() as db:
-            op = db.execute("SELECT mandat_id FROM treso_operations WHERE id = ?", (id_,)).fetchone()
+            op = db.execute("SELECT mandat_id, montant FROM treso_operations WHERE id = ?", (id_,)).fetchone()
             if op is None:
                 raise ErreurDonnees("Transaction introuvable.")
-            if classeur_id is not None and db.execute(
-                    "SELECT 1 FROM treso_classeurs WHERE id = ? AND mandat_id = ?",
-                    (classeur_id, op["mandat_id"])).fetchone() is None:
-                raise ErreurDonnees("Ce classeur n'appartient pas au mandat de la transaction.")
+            if ventilations:
+                if not 2 <= len(ventilations) <= PARTS_MAX:
+                    raise ErreurDonnees(f"Une répartition compte de 2 à {PARTS_MAX} parts.")
+                for cl, montant, _ in ventilations:
+                    self._verifier_classeur(db, cl, op["mandat_id"])
+                    if not montant:
+                        raise ErreurDonnees("Chaque part doit avoir un montant.")
+                ecart = op["montant"] - sum(m for _, m, _ in ventilations)
+                if ecart:
+                    somme = f"{abs(euros(ecart)):.2f}".replace(".", ",")
+                    raise ErreurDonnees("Les parts ne font pas le total de la transaction : "
+                                        + (f"il reste {somme} € à répartir." if (ecart > 0) == (op["montant"] > 0)
+                                           else f"elles le dépassent de {somme} €."))
+                classeur_id = None
+            else:
+                self._verifier_classeur(db, classeur_id, op["mandat_id"])
+            db.execute("DELETE FROM treso_ventilations WHERE operation_id = ?", (id_,))
+            for ordre, (cl, montant, note) in enumerate(ventilations or []):
+                db.execute("INSERT INTO treso_ventilations (operation_id, classeur_id, montant, commentaire, ordre) "
+                           "VALUES (?, ?, ?, ?, ?)", (id_, cl, montant, note, ordre))
             db.execute("UPDATE treso_operations SET classeur_id = ?, commentaire = ?, "
                        "libelle = COALESCE(NULLIF(?, ''), libelle), modifie_par = ?, modifie_le = ? WHERE id = ?",
                        (classeur_id, commentaire, libelle, auteur, _maintenant(), id_))
 
+    def classer(self, ids, classeur_id, auteur):
+        """Classe d'un coup plusieurs transactions du même mandat dans un classeur (ou les remet « à classer »).
+        Les transactions réparties sur plusieurs classeurs ne sont pas touchées. Renvoie (classées, ignorées)."""
+        marques = ", ".join("?" * len(ids))
+        with self._db() as db:
+            ops = db.execute(f"SELECT id, mandat_id, id IN (SELECT operation_id FROM treso_ventilations) AS repartie "
+                             f"FROM treso_operations WHERE id IN ({marques})", list(ids)).fetchall()
+            if len(ops) != len(set(ids)):
+                raise ErreurDonnees("Transaction introuvable : rechargez la page.")
+            if len({o["mandat_id"] for o in ops}) > 1:
+                raise ErreurDonnees("Les transactions choisies sont dans plusieurs mandats.")
+            self._verifier_classeur(db, classeur_id, ops[0]["mandat_id"])
+            a_classer = [o["id"] for o in ops if not o["repartie"]]
+            if a_classer:
+                db.execute(f"UPDATE treso_operations SET classeur_id = ?, modifie_par = ?, modifie_le = ? "
+                           f"WHERE id IN ({', '.join('?' * len(a_classer))})",
+                           (classeur_id, auteur, _maintenant(), *a_classer))
+        return len(a_classer), len(ops) - len(a_classer)
+
     def supprimer_operation(self, id_):
         with self._db() as db:
             db.execute("DELETE FROM treso_justificatifs WHERE operation_id = ?", (id_,))
+            db.execute("DELETE FROM treso_ventilations WHERE operation_id = ?", (id_,))
             if not db.execute("DELETE FROM treso_operations WHERE id = ?", (id_,)).rowcount:
                 raise ErreurDonnees("Transaction introuvable.")
 
@@ -296,19 +380,24 @@ class Tresorerie:
     # -- compte de résultat ----------------------------------------------------------
     def compte_resultat(self, mandat_id):
         """Catégorie › classeur, avec charges (< 0), produits (> 0) et balance ; total du compte de résultat,
-        bloc « hors compte de résultat », lignes non classées et contrôle avec le solde du relevé."""
+        bloc « hors compte de résultat », lignes non classées et contrôle avec le solde du relevé.
+        Une transaction répartie compte pour chacune de ses parts, dans le classeur de la part."""
         with self._db() as db:
             rows = db.execute(
+                "WITH lignes AS ("
+                "  SELECT classeur_id, montant FROM treso_operations WHERE mandat_id = ? AND classeur_id IS NOT NULL"
+                "  UNION ALL SELECT v.classeur_id, v.montant FROM treso_ventilations v"
+                "  JOIN treso_operations o ON o.id = v.operation_id WHERE o.mandat_id = ?) "
                 "SELECT c.id AS categorie_id, c.nom AS categorie, c.hors_cr, c.ordre, cl.id, cl.nom, "
-                "COALESCE(SUM(CASE WHEN o.montant < 0 THEN o.montant END), 0) AS charges, "
-                "COALESCE(SUM(CASE WHEN o.montant > 0 THEN o.montant END), 0) AS produits, COUNT(o.id) AS nb "
+                "COALESCE(SUM(CASE WHEN l.montant < 0 THEN l.montant END), 0) AS charges, "
+                "COALESCE(SUM(CASE WHEN l.montant > 0 THEN l.montant END), 0) AS produits, COUNT(l.montant) AS nb "
                 "FROM treso_classeurs cl JOIN treso_categories c ON c.id = cl.categorie_id "
-                "LEFT JOIN treso_operations o ON o.classeur_id = cl.id WHERE cl.mandat_id = ? GROUP BY cl.id",
-                (mandat_id,)).fetchall()
+                "LEFT JOIN lignes l ON l.classeur_id = cl.id WHERE cl.mandat_id = ? GROUP BY cl.id",
+                (mandat_id, mandat_id, mandat_id)).fetchall()
             non_classe = db.execute(
                 "SELECT COALESCE(SUM(CASE WHEN montant < 0 THEN montant END), 0) AS charges, "
                 "COALESCE(SUM(CASE WHEN montant > 0 THEN montant END), 0) AS produits, COUNT(*) AS nb "
-                "FROM treso_operations WHERE mandat_id = ? AND classeur_id IS NULL", (mandat_id,)).fetchone()
+                f"FROM treso_operations WHERE mandat_id = ? AND {SANS_CLASSEMENT}", (mandat_id,)).fetchone()
             solde = db.execute("SELECT COALESCE(SUM(montant), 0) FROM treso_operations WHERE mandat_id = ?",
                                (mandat_id,)).fetchone()[0]
 

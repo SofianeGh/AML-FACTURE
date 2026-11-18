@@ -518,3 +518,17 @@ dialog select:disabled { opacity: 0.6; }
 
 /* rapprochement avec la trésorerie (listes NDF et factures) */
 .rapproche { color: var(--ok); }
+
+/* trésorerie : classement groupé et répartition d'une transaction */
+.action-groupee { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 4px 0 10px; padding: 8px 12px; background: var(--primary-soft); border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 4px; }
+.action-groupee select { max-width: 16em; }
+.action-groupee .sub { flex-basis: 100%; }
+table.liste .case-ligne { width: 32px; padding-right: 0; }
+table.liste tr.cochee td { background: var(--primary-soft); }
+table.liste td.num .sub { font-family: var(--sans); }
+.repartition { border: 1px solid var(--border); border-radius: 4px; padding: 4px 12px 2px; }
+.repartition h3 { margin-top: 6px; }
+.repartition p { margin: 6px 0; }
+table.parts td:first-child { min-width: 150px; }
+table.parts select { min-width: 9em; }
+table.parts input.montant { min-width: 7em; }

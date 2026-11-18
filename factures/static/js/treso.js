@@ -1,8 +1,9 @@
-// Trésorerie (reprise d'AML Trésorerie) : transactions du relevé, classement, justificatifs (fichiers,
-// notes de frais, factures), compte de résultat et exports, mandats et classeurs.
+// Trésorerie (reprise d'AML Trésorerie) : transactions du relevé, classement (une par une ou plusieurs
+// d'un coup), répartition d'une transaction sur plusieurs classeurs, justificatifs (fichiers, notes de
+// frais, factures), compte de résultat et exports, mandats et classeurs.
 import { api, postJSON, putJSON } from "./api.js";
 import { surOnglet } from "./onglets.js";
-import { $, alerte, dateFr, el, eur, lien } from "./outils.js";
+import { $, alerte, dateFr, el, eur, lien, nombreSaisi } from "./outils.js";
 
 const STATUTS_DOC = { remboursee: "remboursée", a_rembourser: "à rembourser", payee: "payée", a_payer: "à payer" };
 const vue = $("[data-vue=treso]");
@@ -13,9 +14,30 @@ let categories = [];
 let operations = [];
 let sous = "transactions";
 let charge = false;
+const selection = new Set(); // transactions cochées pour le classement groupé
+let derniereCochee = null;   // pour Maj + clic
 
 const mandatId = () => Number(choixMandat.value) || null;
 const classeMontant = (v) => (v < 0 ? "num negatif" : v > 0 ? "num positif" : "num");
+const enCentimes = (v) => Math.round(Number(v) * 100);
+
+// listes « Dossier » puis « Étiquette » (classeurs du dossier choisi)
+function optionsCategories(select, valeur = "", premier = "Choisir…") {
+  const cats = [...new Map(classeurs.map((c) => [c.categorie_id, c.categorie_nom]))];
+  select.replaceChildren(el("option", { value: "" }, premier),
+    ...cats.map(([cid, nom]) => el("option", { value: String(cid) }, nom)));
+  select.value = String(valeur || "");
+}
+
+function optionsClasseurs(select, categorieId, valeur = "", sansDossier = "Choisir d'abord le dossier") {
+  const liste = classeurs.filter((c) => c.categorie_id === Number(categorieId));
+  select.replaceChildren(el("option", { value: "" }, categorieId ? "Choisir…" : sansDossier),
+    ...liste.map((c) => el("option", { value: String(c.id) }, c.nom)));
+  select.disabled = !categorieId;
+  select.value = String(valeur || "");
+}
+
+const categorieDe = (classeurId) => classeurs.find((c) => c.id === Number(classeurId))?.categorie_id ?? "";
 
 function message(texte, type = "") {
   const m = $("#treso-message");
@@ -111,25 +133,106 @@ async function chargerOperations() {
   }
   const total = operations.reduce((s, o) => s + o.montant, 0);
   $("#treso-resume").textContent = `${operations.length} ligne${operations.length > 1 ? "s" : ""} · total ${eur.format(total)}`;
+  const visibles = new Set(operations.map((o) => o.id));
+  [...selection].forEach((id) => { if (!visibles.has(id)) selection.delete(id); });
   $("#treso-operations").replaceChildren(...operations.map(ligneOperation));
   $("#treso-vide").hidden = operations.length > 0;
   $("#treso-vide").textContent = "Aucune transaction : importez le relevé CSV du mois.";
+  majSelection();
 }
 
-function ligneOperation(o) {
-  const details = [o.classeur_id ? nomClasseur(o.classeur_id) : null,
+const classee = (o) => o.classeur_id || o.ventilations.length;
+
+function ligneOperation(o, index) {
+  const repartition = o.ventilations.length
+    ? `Répartie : ${o.ventilations.map((p) => `${classeurs.find((c) => c.id === p.classeur_id)?.nom ?? "?"} ${eur.format(p.montant)}`).join(" · ")}`
+    : null;
+  const details = [o.classeur_id ? nomClasseur(o.classeur_id) : repartition,
     o.justificatifs.length ? `${o.justificatifs.length} justificatif${o.justificatifs.length > 1 ? "s" : ""}` : null,
     o.commentaire ? `Note : ${o.commentaire}` : null].filter(Boolean).join(" · ");
-  return el("tr", { class: o.classeur_id ? "" : "a-classer" },
+  const case_ = el("input", { type: "checkbox", "aria-label": `Cocher la transaction du ${dateFr(o.date)}` });
+  case_.checked = selection.has(o.id);
+  case_.addEventListener("click", (e) => cocher(o.id, index, case_.checked, e.shiftKey));
+  return el("tr", { class: classee(o) ? "" : "a-classer", "data-id": String(o.id) },
+    el("td", { class: "case-ligne" }, case_),
     el("td", { class: "num" }, dateFr(o.date)),
     el("td", { class: "sub" }, o.nature),
     el("td", {}, el("span", { class: "desig" }, o.libelle),
-      el("div", { class: "sub" }, o.classeur_id ? "" : el("span", { class: "pastille st-attente" }, "À classer"),
-        o.classeur_id ? details : details ? ` ${details}` : "")),
+      el("div", { class: "sub" }, classee(o) ? "" : el("span", { class: "pastille st-attente" }, "À classer"),
+        classee(o) ? details : details ? ` ${details}` : "")),
     el("td", { class: classeMontant(o.montant) }, eur.format(o.montant)),
     el("td", { class: "actions" }, lien("Modifier", () => ouvrirOperation(o.id)),
       lien("Supprimer", () => supprimerOperation(o))));
 }
+
+// ---------------------------------------------------------------- classement groupé
+
+function cocher(id, index, coche, plage) {
+  // Maj + clic : coche (ou décoche) toutes les lignes entre la précédente et celle-ci
+  const indices = plage && derniereCochee !== null
+    ? Array.from({ length: Math.abs(index - derniereCochee) + 1 }, (_, k) => Math.min(index, derniereCochee) + k)
+    : [index];
+  indices.forEach((i) => { if (coche) selection.add(operations[i].id); else selection.delete(operations[i].id); });
+  derniereCochee = index;
+  majSelection();
+}
+
+function majSelection() {
+  document.querySelectorAll("#treso-operations tr").forEach((tr) => {
+    const coche = selection.has(Number(tr.dataset.id));
+    tr.classList.toggle("cochee", coche);
+    tr.querySelector("input[type=checkbox]").checked = coche;
+  });
+  const tout = $("#treso-tout");
+  tout.checked = operations.length > 0 && selection.size === operations.length;
+  tout.indeterminate = selection.size > 0 && selection.size < operations.length;
+  const barre = $("#treso-groupe");
+  const etaitCachee = barre.hidden;
+  barre.hidden = selection.size === 0;
+  $("#treso-groupe-nb").textContent = `${selection.size} transaction${selection.size > 1 ? "s" : ""} cochée${selection.size > 1 ? "s" : ""}`;
+  if (etaitCachee && !barre.hidden) {
+    optionsCategories($("#treso-groupe-categorie"), "", "Dossier…");
+    optionsClasseursGroupe();
+  }
+}
+
+function optionsClasseursGroupe() {
+  const select = $("#treso-groupe-classeur");
+  optionsClasseurs(select, $("#treso-groupe-categorie").value, "", "Étiquette…");
+  select.disabled = false;  // « À classer » reste possible sans dossier
+  select.append(el("option", { value: "aucun" }, "À classer (retirer le classement)"));
+}
+
+$("#treso-tout").addEventListener("change", (e) => {
+  operations.forEach((o) => { if (e.target.checked) selection.add(o.id); else selection.delete(o.id); });
+  derniereCochee = null;
+  majSelection();
+});
+$("#treso-groupe-categorie").addEventListener("change", optionsClasseursGroupe);
+$("#treso-groupe-annuler").addEventListener("click", () => {
+  selection.clear();
+  majSelection();
+});
+
+$("#treso-groupe-classer").addEventListener("click", async () => {
+  const choix = $("#treso-groupe-classeur").value;
+  if (!choix) {
+    message("Choisissez le dossier et l'étiquette où classer les transactions cochées.", "ko");
+    return;
+  }
+  try {
+    const r = await postJSON("api/treso/operations/classer", {
+      ids: [...selection], classeur_id: choix === "aucun" ? null : Number(choix),
+    });
+    const ou = choix === "aucun" ? "remises à classer" : `classées dans ${nomClasseur(Number(choix))}`;
+    message(`${r.classees} transaction${r.classees > 1 ? "s" : ""} ${ou}.`
+      + (r.reparties_ignorees ? ` ${r.reparties_ignorees} transaction${r.reparties_ignorees > 1 ? "s" : ""} répartie${r.reparties_ignorees > 1 ? "s" : ""} sur plusieurs classeurs n'${r.reparties_ignorees > 1 ? "ont" : "a"} pas été modifiée${r.reparties_ignorees > 1 ? "s" : ""}.` : ""), "ok");
+    selection.clear();
+    chargerOperations();
+  } catch (e) {
+    message(e.message, "ko");
+  }
+});
 
 $("#treso-mois").addEventListener("change", chargerOperations);
 $("#treso-a-classer").addEventListener("change", chargerOperations);
@@ -169,14 +272,79 @@ const dlg = $("#dlg-operation");
 const form = $("#form-operation");
 const q = (k) => form.querySelector(`[data-f="${k}"]`);
 let courante = null;
+let parts = null; // null = un seul classeur ; sinon [{categorie, classeur_id, montant, commentaire}]
 
 function remplirClasseurs(categorieId, classeurId = "") {
-  const liste = classeurs.filter((c) => c.categorie_id === Number(categorieId));
-  form.classeur_id.replaceChildren(el("option", { value: "" }, categorieId ? "Choisir…" : "Choisir d'abord le dossier"),
-    ...liste.map((c) => el("option", { value: String(c.id) }, c.nom)));
-  form.classeur_id.disabled = !categorieId;
-  form.classeur_id.value = String(classeurId || "");
+  optionsClasseurs(form.classeur_id, categorieId, classeurId);
 }
+
+// ---------------------------------------------------------------- répartition sur plusieurs classeurs
+
+function modeRepartition(actif) {
+  form.querySelectorAll("[data-mode=simple]").forEach((e) => { e.hidden = actif; });
+  form.querySelector("[data-mode=repartition]").hidden = !actif;
+}
+
+function resteCentimes() {
+  return enCentimes(courante.montant) - parts.reduce((s, p) => s + enCentimes(nombreSaisi(p.montant)), 0);
+}
+
+function majReste() {
+  const reste = resteCentimes();
+  const cellule = q("reste");
+  cellule.textContent = reste ? `Reste à répartir : ${eur.format(reste / 100)}` : "Tout est réparti";
+  cellule.className = `num ${reste ? "negatif" : "positif"}`;
+}
+
+function afficherParts() {
+  q("parts").replaceChildren(...parts.map((p, i) => {
+    const dossier = el("select", { "aria-label": `Part ${i + 1} : dossier` });
+    const etiquette = el("select", { "aria-label": `Part ${i + 1} : étiquette` });
+    optionsCategories(dossier, p.categorie);
+    optionsClasseurs(etiquette, p.categorie, p.classeur_id, "Dossier d'abord");
+    dossier.addEventListener("change", () => {
+      p.categorie = dossier.value;
+      p.classeur_id = "";
+      optionsClasseurs(etiquette, p.categorie, "", "Dossier d'abord");
+    });
+    etiquette.addEventListener("change", () => { p.classeur_id = etiquette.value; });
+    const montant = el("input", { type: "number", step: "0.01", inputmode: "decimal", class: "montant",
+      "aria-label": `Part ${i + 1} : montant` });
+    montant.value = p.montant;
+    montant.addEventListener("input", () => { p.montant = montant.value; majReste(); });
+    const note = el("input", { maxlength: "200", placeholder: "ex. billetterie du gala", "aria-label": `Part ${i + 1} : note` });
+    note.value = p.commentaire;
+    note.addEventListener("input", () => { p.commentaire = note.value; });
+    const retirer = el("button", { class: "reset", type: "button", title: "Retirer cette part", "aria-label": "Retirer la part" }, "×");
+    retirer.addEventListener("click", () => { parts.splice(i, 1); afficherParts(); });
+    return el("tr", {}, el("td", {}, dossier), el("td", {}, etiquette), el("td", { class: "num" }, montant),
+      el("td", {}, note), el("td", {}, parts.length > 2 ? retirer : ""));
+  }));
+  majReste();
+}
+
+const partVide = () => ({ categorie: "", classeur_id: "", montant: "", commentaire: "" });
+
+q("repartir").addEventListener("click", () => {
+  // la première part reprend le classeur déjà choisi ; les montants sont à saisir
+  const cl = form.classeur_id.value;
+  parts = [{ ...partVide(), categorie: categorieDe(cl), classeur_id: cl }, partVide()];
+  modeRepartition(true);
+  afficherParts();
+});
+q("ajouter-part").addEventListener("click", () => { parts.push(partVide()); afficherParts(); });
+q("completer").addEventListener("click", () => {
+  const derniere = parts.at(-1);
+  derniere.montant = ((enCentimes(nombreSaisi(derniere.montant)) + resteCentimes()) / 100).toFixed(2);
+  afficherParts();
+});
+q("un-seul").addEventListener("click", () => {
+  const premiere = parts?.find((p) => p.classeur_id);
+  parts = null;
+  modeRepartition(false);
+  form.categorie.value = String(categorieDe(premiere?.classeur_id) || "");
+  remplirClasseurs(form.categorie.value, premiere?.classeur_id);
+});
 
 function afficherJustificatifs() {
   q("justificatifs").replaceChildren(...(courante.justificatifs.length ? courante.justificatifs.map((j) => {
@@ -230,12 +398,13 @@ function ouvrirOperation(id) {
     el("strong", { class: o.montant < 0 ? "negatif" : "positif" }, eur.format(o.montant)), el("br"), o.libelle);
   form.libelle.value = o.libelle;
   form.commentaire.value = o.commentaire || "";
-  const classeur = classeurs.find((c) => c.id === o.classeur_id);
-  const cats = [...new Map(classeurs.map((c) => [c.categorie_id, c.categorie_nom]))];
-  form.categorie.replaceChildren(el("option", { value: "" }, "Choisir…"),
-    ...cats.map(([cid, nom]) => el("option", { value: String(cid) }, nom)));
-  form.categorie.value = classeur ? String(classeur.categorie_id) : "";
-  remplirClasseurs(classeur?.categorie_id, o.classeur_id);
+  optionsCategories(form.categorie, categorieDe(o.classeur_id));
+  remplirClasseurs(categorieDe(o.classeur_id), o.classeur_id);
+  parts = o.ventilations.length ? o.ventilations.map((p) => ({
+    categorie: categorieDe(p.classeur_id), classeur_id: String(p.classeur_id), montant: p.montant.toFixed(2),
+    commentaire: p.commentaire })) : null;
+  modeRepartition(Boolean(parts));
+  if (parts) afficherParts();
   q("erreur").textContent = "";
   q("aide").textContent = o.montant < 0
     ? "Une note de frais jointe à ce débit passe à « Remboursée »."
@@ -247,11 +416,20 @@ function ouvrirOperation(id) {
 
 form.categorie.addEventListener("change", () => remplirClasseurs(form.categorie.value));
 
-// Enregistre motif, classeur et commentaire (aussi avant d'ajouter un justificatif)
+// Enregistre motif, classement (un classeur ou la répartition) et commentaire (aussi avant d'ajouter
+// un justificatif). Une répartition incomplète est refusée avant même d'appeler le serveur.
 async function enregistrerOperation() {
+  if (parts) {
+    if (parts.some((p) => !p.classeur_id)) throw new Error("Choisissez l'étiquette (classeur) de chaque part.");
+    if (parts.some((p) => !enCentimes(nombreSaisi(p.montant)))) throw new Error("Chaque part doit avoir un montant.");
+    const reste = resteCentimes();
+    if (reste) throw new Error(`Les parts ne font pas le total : reste à répartir ${eur.format(reste / 100)}.`);
+  }
   await putJSON(`api/treso/operations/${courante.id}`, {
-    classeur_id: form.classeur_id.value ? Number(form.classeur_id.value) : null,
+    classeur_id: !parts && form.classeur_id.value ? Number(form.classeur_id.value) : null,
     commentaire: form.commentaire.value, libelle: form.libelle.value,
+    ventilations: parts ? parts.map((p) => ({ classeur_id: Number(p.classeur_id), montant: nombreSaisi(p.montant),
+      commentaire: p.commentaire })) : null,
   });
 }
 
@@ -348,15 +526,21 @@ async function afficherDetail(classeur, categorie) {
   $("#treso-detail").replaceChildren();
   try {
     const ops = await api(`api/treso/operations?mandat=${mandatId()}&classeur=${classeur.id}`);
-    const somme = (f) => ops.filter(f).reduce((s, o) => s + o.montant, 0);
-    const charges = somme((o) => o.montant < 0);
-    const produits = somme((o) => o.montant > 0);
+    // montants qui reviennent à ce classeur : la transaction entière, ou ses parts dans ce classeur
+    const montants = ops.flatMap((o) => (o.classeur_id === classeur.id ? [o.montant]
+      : o.ventilations.filter((p) => p.classeur_id === classeur.id).map((p) => p.montant)));
+    const charges = montants.filter((m) => m < 0).reduce((s, m) => s + m, 0);
+    const produits = montants.filter((m) => m > 0).reduce((s, m) => s + m, 0);
     $("#treso-detail-resume").textContent = `${ops.length} transaction${ops.length > 1 ? "s" : ""} — charges ${eur.format(charges)} — produits ${eur.format(produits)} — balance ${eur.format(charges + produits)}`;
-    $("#treso-detail").replaceChildren(...(ops.length ? ops.map((o) => el("tr", {},
-      el("td", { class: "num" }, dateFr(o.date)), el("td", { class: "sub" }, o.nature), el("td", {}, o.libelle),
-      el("td", { class: classeMontant(o.montant) }, eur.format(o.montant)), el("td", { class: "sub" }, o.commentaire),
-      el("td", { class: "justifs-liste" }, ...o.justificatifs.map(lienJustificatif))))
-      : [el("tr", {}, el("td", { colspan: "6", class: "sub" }, "Aucune transaction dans ce classeur."))]));
+    $("#treso-detail").replaceChildren(...(ops.length ? ops.map((o) => {
+      const notes = o.ventilations.filter((p) => p.classeur_id === classeur.id && p.commentaire).map((p) => p.commentaire);
+      return el("tr", {},
+        el("td", { class: "num" }, dateFr(o.date)), el("td", { class: "sub" }, o.nature), el("td", {}, o.libelle),
+        el("td", { class: classeMontant(o.montant_classeur) }, eur.format(o.montant_classeur),
+          o.classeur_id === classeur.id ? "" : el("div", { class: "sub" }, `part de ${eur.format(o.montant)}`)),
+        el("td", { class: "sub" }, [o.commentaire, ...notes].filter(Boolean).join(" · ")),
+        el("td", { class: "justifs-liste" }, ...o.justificatifs.map(lienJustificatif)));
+    }) : [el("tr", {}, el("td", { colspan: "6", class: "sub" }, "Aucune transaction dans ce classeur."))]));
   } catch (e) {
     message(e.message, "ko");
   }

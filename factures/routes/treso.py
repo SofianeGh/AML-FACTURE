@@ -1,8 +1,11 @@
 """Trésorerie : mandats, classeurs, transactions du relevé, justificatifs, compte de résultat et exports.
 
-Reprend l'API d'AML Trésorerie (sous /api/treso/…). En plus : une transaction peut recevoir comme
-justificatif une note de frais ou une facture de l'application ; la note passe alors à « Remboursée »
-(débit) et la facture à « Payée » (crédit).
+Reprend l'API d'AML Trésorerie (sous /api/treso/…). En plus :
+- une transaction peut recevoir comme justificatif une note de frais ou une facture de l'application ;
+  la note passe alors à « Remboursée » (débit) et la facture à « Payée » (crédit) ;
+- plusieurs transactions peuvent être classées d'un coup ;
+- une transaction peut être répartie sur plusieurs classeurs (versement HelloAsso de plusieurs
+  billetteries, versement du TPE qui mélange un événement et les ventes habituelles, frais déduits…).
 """
 import io
 import mimetypes
@@ -12,14 +15,14 @@ import re
 from flask import Blueprint, g, jsonify, request, send_file
 
 from ..aml.association import association
-from ..aml.champs import date_iso, texte
+from ..aml.champs import date_iso, nombre, texte
 from ..aml.devis import nom_fichier as nom_fichier_piece
 from ..aml.ndf import nom_fichier as nom_fichier_note
 from ..commun import RequeteInvalide, client, erreur, load_config, log, stockage, tresorerie
 from ..nextcloud import NextcloudError
 from ..treso.exports import export_csv, export_excel, export_pdf
 from ..treso.releve import ReleveIllisible, lire_releve
-from ..treso.stockage import LIENS
+from ..treso.stockage import LIENS, PARTS_MAX, centimes
 from .devis import pdf_piece
 from .ndf import pdf_note
 
@@ -72,8 +75,9 @@ def copie_nextcloud(op, nom, contenu):
     cfg = load_config()
     if not (cfg["nextcloud_url"] and cfg["nextcloud_login"] and cfg["nextcloud_password"]):
         return None, None
-    dossier = "/".join(_nettoyer(d) for d in (op["mandat"], "[3] Trésorerie", op["categorie"] or "À classer",
-                                               op["classeur"] or "À classer"))
+    sans = "Réparti" if op.get("ventilations") else "À classer"  # transaction répartie : pas de classeur unique
+    dossier = "/".join(_nettoyer(d) for d in (op["mandat"], "[3] Trésorerie", op["categorie"] or sans,
+                                               op["classeur"] or sans))
     try:
         nc = client(cfg)
         nc.make_dirs(dossier)
@@ -165,13 +169,45 @@ def importer():
                     "hors_mandat": hors})
 
 
+def _lire_parts(valeur):
+    """[{classeur_id, montant, commentaire}, …] -> [(classeur_id, centimes, commentaire)] ; None = pas de répartition."""
+    if not valeur:
+        return None
+    if not isinstance(valeur, list) or len(valeur) > PARTS_MAX:
+        raise RequeteInvalide("Répartition illisible.")
+    parts = []
+    for i, part in enumerate(valeur, 1):
+        if not isinstance(part, dict):
+            raise RequeteInvalide(f"Part {i} illisible.")
+        parts.append((_entier(part.get("classeur_id"), f"Part {i} : classeur"),
+                      centimes(nombre(part.get("montant"), f"Part {i} : montant", -1_000_000, 1_000_000)),
+                      texte(part, "commentaire", 200, f"Part {i} : note")))
+    return parts
+
+
 @bp.put("/api/treso/operations/<int:id_>")
 def modifier_operation(id_):
+    """Motif, commentaire et classement : un classeur, ou une répartition (« ventilations ») sur plusieurs."""
     data = request.get_json(silent=True) or {}
     tresorerie().modifier_operation(id_, _entier(data.get("classeur_id"), "Classeur", obligatoire=False),
                                     texte(data, "commentaire", 1000, "Commentaire", lignes=10),
-                                    texte(data, "libelle", 300, "Motif"), g.utilisateur["nom"])
+                                    texte(data, "libelle", 300, "Motif"), g.utilisateur["nom"],
+                                    ventilations=_lire_parts(data.get("ventilations")))
     return jsonify(tresorerie().operation(id_))
+
+
+@bp.post("/api/treso/operations/classer")
+def classer_plusieurs():
+    """{ids: [...], classeur_id} : classe d'un coup les transactions cochées (classeur vide = « à classer »)."""
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids")
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 1000:
+        raise RequeteInvalide("Choisissez au moins une transaction.")
+    ids = [_entier(i, "Transaction") for i in ids]
+    classees, ignorees = tresorerie().classer(ids, _entier(data.get("classeur_id"), "Classeur", obligatoire=False),
+                                              g.utilisateur["nom"])
+    log.info("%s a classé %s transactions d'un coup", g.utilisateur["nom"], classees)
+    return jsonify({"classees": classees, "reparties_ignorees": ignorees})
 
 
 @bp.delete("/api/treso/operations/<int:id_>")

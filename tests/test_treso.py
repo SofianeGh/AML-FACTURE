@@ -241,3 +241,80 @@ def test_reprise_du_referentiel_d_aml_tresorerie(app):
     assert [m["nom"] for m in treso.mandats()] == ["2026 - 2027", "2025 - 2026"]
     assert treso.classeurs(2) == [{"id": 24, "nom": "Mouvement interne", "categorie_id": 7,
                                    "categorie_nom": "Hors Compte de Résultats", "nb": 0}]
+
+
+# ---------------------------------------------------------------- classement groupé et répartition
+
+def a_classer(client, mandat):
+    return client.get(f"/api/treso/operations?mandat={mandat}&a_classer=1").get_json()
+
+
+def test_classement_groupe(membre, mandat):
+    importer(membre, mandat)
+    ops = membre.get(f"/api/treso/operations?mandat={mandat}").get_json()
+    boulangerie = [o["id"] for o in ops if o["montant"] == -12.5]
+    local = classeur(membre, mandat, "Vente au local")["id"]
+    classer = lambda ids, cl: membre.post("/api/treso/operations/classer", headers=ENTETE,  # noqa: E731
+                                          json={"ids": ids, "classeur_id": cl})
+    assert classer(boulangerie, local).get_json() == {"classees": 2, "reparties_ignorees": 0}
+    assert len(a_classer(membre, mandat)) == 3
+    assert {o["classeur_id"] for o in membre.get(f"/api/treso/operations?mandat={mandat}&classeur={local}").get_json()} \
+        == {local}
+    assert classer(boulangerie, None).get_json()["classees"] == 2  # remises « à classer »
+    assert len(a_classer(membre, mandat)) == 5
+
+    autre = membre.post("/api/treso/mandats", headers=ENTETE, json={
+        "nom": "2026 - 2027", "debut": "2026-09-01", "fin": "2027-08-31", "copier_de": mandat}).get_json()["id"]
+    assert classer(boulangerie, classeur(membre, autre, "Vente au local")["id"]).status_code == 400
+    assert classer([], local).status_code == 400
+    assert classer([999999], local).status_code == 400
+
+
+def test_repartition_d_un_versement(membre, mandat):
+    """Versement de 900 € = billetterie du gala 600 € + galette 320 € − 20 € de commission."""
+    importer(membre, mandat)
+    versement = next(o for o in membre.get(f"/api/treso/operations?mandat={mandat}").get_json() if o["montant"] == 900)
+    gala = classeur(membre, mandat, "Gala Fin d'année AML")["id"]
+    galette = classeur(membre, mandat, "Galette des Rois")["id"]
+    frais = classeur(membre, mandat, "Frais / Cotisations / Abonnements")["id"]
+    parts = [{"classeur_id": gala, "montant": 600, "commentaire": "billetterie du gala"},
+             {"classeur_id": galette, "montant": "320,00", "commentaire": ""},
+             {"classeur_id": frais, "montant": -20, "commentaire": "commission"}]
+    modifier = lambda corps: membre.put(f"/api/treso/operations/{versement['id']}", headers=ENTETE,  # noqa: E731
+                                        json=corps)
+
+    # refus : total faux (manque ou dépassement), une seule part, part vide
+    reponse = modifier({"ventilations": [parts[0], {**parts[1], "montant": 280}]})
+    assert reponse.status_code == 400 and "reste 20,00 € à répartir" in reponse.get_json()["erreur"]
+    assert "dépassent de 20,00 €" in modifier({"ventilations": parts[:2]}).get_json()["erreur"]
+    assert modifier({"ventilations": [{**parts[0], "montant": 900}]}).status_code == 400
+    assert modifier({"ventilations": [*parts, {"classeur_id": gala, "montant": 0}]}).status_code == 400
+
+    reponse = modifier({"classeur_id": galette, "commentaire": "versement HelloAsso", "ventilations": parts})
+    assert reponse.status_code == 200, reponse.get_json()
+    op = reponse.get_json()
+    assert op["classeur_id"] is None and [p["montant"] for p in op["ventilations"]] == [600.0, 320.0, -20.0]
+    assert all(o["id"] != versement["id"] for o in a_classer(membre, mandat))  # répartie = classée
+
+    cr = membre.get(f"/api/treso/compte-resultat?mandat={mandat}").get_json()
+    par_nom = {k["nom"]: k for c in cr["categories"] for k in c["classeurs"]}
+    assert (par_nom["Gala Fin d'année AML"]["produits"], par_nom["Galette des Rois"]["produits"]) == (600.0, 320.0)
+    assert par_nom["Frais / Cotisations / Abonnements"]["charges"] == -20.0
+    assert cr["total_cr"] == {"charges": -20.0, "produits": 920.0, "balance": 900.0}
+    assert cr["non_classe"]["nb"] == 4 and cr["ecart"] == 0
+
+    detail = membre.get(f"/api/treso/operations?mandat={mandat}&classeur={gala}").get_json()
+    assert len(detail) == 1 and detail[0]["montant_classeur"] == 600.0 and detail[0]["montant"] == 900.0
+    assert next(c for c in membre.get(f"/api/treso/classeurs?mandat={mandat}").get_json() if c["id"] == gala)["nb"] == 1
+    assert membre.delete(f"/api/treso/classeurs/{gala}", headers=ENTETE).status_code == 400  # une part y est
+
+    # le classement groupé ne touche pas une transaction répartie
+    reponse = membre.post("/api/treso/operations/classer", headers=ENTETE,
+                          json={"ids": [versement["id"]], "classeur_id": galette})
+    assert reponse.get_json() == {"classees": 0, "reparties_ignorees": 1}
+
+    # revenir à un seul classeur retire les parts
+    op = modifier({"classeur_id": galette, "ventilations": None}).get_json()
+    assert op["classeur_id"] == galette and op["ventilations"] == []
+    cr = membre.get(f"/api/treso/compte-resultat?mandat={mandat}").get_json()
+    assert cr["total_cr"] == {"charges": 0.0, "produits": 900.0, "balance": 900.0}

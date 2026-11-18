@@ -349,10 +349,18 @@
           <label class="case"><input type="checkbox" id="treso-a-classer"> À classer seulement</label>
           <span class="sub resume-liste" id="treso-resume"></span>
         </div>
+        <div class="action-groupee" id="treso-groupe" hidden>
+          <strong id="treso-groupe-nb"></strong>
+          <select id="treso-groupe-categorie" aria-label="Dossier (catégorie)"></select>
+          <select id="treso-groupe-classeur" aria-label="Étiquette (classeur)"></select>
+          <button class="btn primary" type="button" id="treso-groupe-classer">Classer</button>
+          <button class="btn ghost" type="button" id="treso-groupe-annuler">Tout décocher</button>
+          <span class="sub">Astuce : Maj + clic coche toutes les lignes entre deux cases.</span>
+        </div>
         <div class="table-wrap">
           <table class="liste">
             <thead>
-              <tr><th>Date</th><th>Nature</th><th>Motif</th><th class="num">Montant</th><th></th></tr>
+              <tr><th class="case-ligne"><input type="checkbox" id="treso-tout" aria-label="Tout cocher"></th><th>Date</th><th>Nature</th><th>Motif</th><th class="num">Montant</th><th></th></tr>
             </thead>
             <tbody id="treso-operations"></tbody>
           </table>
@@ -642,9 +650,31 @@
       <p class="resume-operation" data-f="resume"></p>
       <div class="grille">
         <label class="field large"><span>Motif</span><input name="libelle" maxlength="300"></label>
-        <label class="field"><span>Dossier (catégorie)</span><select name="categorie"></select></label>
-        <label class="field"><span>Étiquette (classeur)</span><select name="classeur_id"></select></label>
+        <label class="field" data-mode="simple"><span>Dossier (catégorie)</span><select name="categorie"></select></label>
+        <label class="field" data-mode="simple"><span>Étiquette (classeur)</span><select name="classeur_id"></select></label>
         <label class="field large"><span>Commentaire</span><textarea name="commentaire" rows="2" maxlength="1000"></textarea></label>
+      </div>
+      <p data-mode="simple"><button class="lien" type="button" data-f="repartir">Répartir sur plusieurs classeurs</button>
+        <span class="sub">(versement HelloAsso de plusieurs billetteries, TPE qui mélange un événement et les ventes du local…)</span></p>
+      <div class="repartition" data-mode="repartition" hidden>
+        <h3>Répartition</h3>
+        <p class="sub">Chaque part va dans son classeur ; la somme des parts doit faire le montant de la transaction. Une part peut être négative (ex. frais du TPE retenus sur le versement).</p>
+        <div class="table-wrap">
+          <table class="lignes parts">
+            <thead>
+              <tr><th>Dossier</th><th>Étiquette</th><th class="num">Montant</th><th>Note</th><th></th></tr>
+            </thead>
+            <tbody data-f="parts"></tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2"><button class="lien" type="button" data-f="ajouter-part">+ Ajouter une part</button></td>
+                <td class="num" data-f="reste"></td>
+                <td colspan="2"><button class="lien" type="button" data-f="completer">Mettre le reste sur la dernière part</button></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p><button class="lien" type="button" data-f="un-seul">Revenir à un seul classeur</button></p>
       </div>
       <h3>Justificatifs</h3>
       <ul class="justifs" data-f="justificatifs"></ul>
