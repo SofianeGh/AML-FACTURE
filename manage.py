@@ -6,17 +6,21 @@
     python manage.py supprimer-utilisateur NOM
     python manage.py lister-utilisateurs
     python manage.py initialiser          (crée le premier administrateur si aucun compte n'existe)
+    python manage.py reprendre-tresorerie FICHIER.json
+                                          (mandats, catégories et classeurs exportés d'AML Trésorerie)
 
 Le mot de passe est demandé au clavier (ou lu dans la variable MOT_DE_PASSE).
 Les données sont dans DATA_DIR (./data par défaut), comme pour l'application.
 """
 import argparse
 import getpass
+import json
 import os
 import sys
 
 from factures.config import dossier_donnees
-from factures.stockage import ErreurCompte, Stockage
+from factures.stockage import ErreurCompte, ErreurDonnees, Stockage
+from factures.treso import Tresorerie
 
 
 def demander_mot_de_passe():
@@ -41,6 +45,8 @@ def main(argv=None):
     sous.add_parser("supprimer-utilisateur", help="supprimer un compte").add_argument("nom")
     sous.add_parser("lister-utilisateurs", help="lister les comptes")
     sous.add_parser("initialiser", help="créer le premier administrateur si besoin")
+    sous.add_parser("reprendre-tresorerie", help="reprendre mandats, catégories et classeurs d'AML Trésorerie "
+                                                 "(base sans transaction)").add_argument("fichier")
     args = parser.parse_args(argv)
 
     stockage = Stockage(dossier_donnees() / "aml-factures.db")
@@ -70,7 +76,11 @@ def main(argv=None):
             nom = input("Nom du compte (ex. sofiane) : ")
             nom = stockage.ajouter_utilisateur(nom, demander_mot_de_passe(), admin=True)
             print(f"Compte administrateur « {nom} » créé.")
-    except ErreurCompte as exc:
+        elif args.commande == "reprendre-tresorerie":
+            with open(args.fichier, encoding="utf-8") as f:
+                nombres = Tresorerie(stockage).reprendre_referentiel(json.load(f))
+            print("Repris : " + ", ".join(f"{n} {k}" for k, n in nombres.items()) + ".")
+    except (ErreurCompte, ErreurDonnees) as exc:
         print(f"Erreur : {exc}", file=sys.stderr)
         return 1
     return 0

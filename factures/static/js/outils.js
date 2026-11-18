@@ -70,3 +70,10 @@ export function alerte(texte) {
   bandeau.textContent = texte;
   bandeau.hidden = !texte;
 }
+
+// « En trésorerie : 12/11/2026 (−242,20 €) » : transactions du relevé où la note ou la facture est jointe
+export function rapprochement(liens = []) {
+  if (!liens.length) return null;
+  return el("div", { class: "sub rapproche", title: "Jointe à une transaction de la trésorerie" },
+    `En trésorerie : ${liens.map((l) => `${dateFr(l.date)} (${eur.format(l.montant)})`).join(", ")}`);
+}

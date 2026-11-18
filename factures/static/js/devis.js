@@ -1,7 +1,7 @@
 // Devis et factures de l'association : liste, formulaire, numérotation, transformation d'un devis en facture.
 import { api, postJSON, putJSON } from "./api.js";
 import { surOnglet } from "./onglets.js";
-import { $, alerte, aujourdhui, dateFr, el, eur, lien, nombreSaisi, ouvrirApresEnregistrement } from "./outils.js";
+import { $, alerte, aujourdhui, dateFr, el, eur, lien, nombreSaisi, ouvrirApresEnregistrement, rapprochement } from "./outils.js";
 
 const TYPES = { devis: "Devis", facture: "Facture" };
 const STATUTS = {
@@ -88,7 +88,7 @@ function ligneListe(p) {
     el("td", { class: "num numero" }, p.numero, el("span", { class: "sub type" }, TYPES[p.type])),
     el("td", { class: "num" }, dateFr(p.date)),
     el("td", {}, p.client),
-    el("td", {}, p.objet),
+    el("td", {}, p.objet, rapprochement(p.rapprochements)),
     el("td", { class: "num" }, eur.format(p.total_ttc)),
     el("td", {}, suivi),
     el("td", { class: "actions" }, ...actions));

@@ -61,6 +61,7 @@
       <button type="button" role="tab" data-onglet="metro" aria-selected="true">Factures METRO</button>
       <button type="button" role="tab" data-onglet="ndf" aria-selected="false">Notes de frais</button>
       <button type="button" role="tab" data-onglet="devis" aria-selected="false">Devis et factures</button>
+      <button type="button" role="tab" data-onglet="treso" aria-selected="false">Trésorerie</button>
     </nav>
   </header>
 
@@ -323,6 +324,100 @@
         <p class="vide" id="devis-vide">Chargement…</p>
       </section>
     </div>
+
+    <!-- ============================================================ trésorerie -->
+    <div class="vue" data-vue="treso" role="tabpanel" hidden>
+      <div class="barre-vue">
+        <div>
+          <h2>Trésorerie</h2>
+          <p class="meta">Relevés bancaires, classement par mandat et compte de résultat. Une transaction peut recevoir une note de frais ou une facture comme justificatif.</p>
+        </div>
+        <label class="field"><span>Mandat</span><select id="treso-mandat"></select></label>
+      </div>
+
+      <nav class="sous-onglets" aria-label="Parties de la trésorerie">
+        <button type="button" data-sous="transactions" aria-selected="true">Transactions</button>
+        <button type="button" data-sous="cr" aria-selected="false">Compte de résultat</button>
+        <button type="button" data-sous="reglages" aria-selected="false">Mandats et classeurs</button>
+      </nav>
+      <div id="treso-message" class="statut" role="status"></div>
+
+      <section class="carte" data-sous-vue="transactions">
+        <div class="liste-entete">
+          <label class="btn primary">Importer un relevé CSV<input type="file" id="treso-import" accept=".csv,text/csv" hidden></label>
+          <label class="inline sub">Mois <input type="month" id="treso-mois"></label>
+          <label class="case"><input type="checkbox" id="treso-a-classer"> À classer seulement</label>
+          <span class="sub resume-liste" id="treso-resume"></span>
+        </div>
+        <div class="table-wrap">
+          <table class="liste">
+            <thead>
+              <tr><th>Date</th><th>Nature</th><th>Motif</th><th class="num">Montant</th><th></th></tr>
+            </thead>
+            <tbody id="treso-operations"></tbody>
+          </table>
+        </div>
+        <p class="vide" id="treso-vide">Chargement…</p>
+      </section>
+
+      <section class="carte" data-sous-vue="cr" hidden>
+        <div data-f="cr-vue">
+          <div class="liste-entete">
+            <a class="btn" id="treso-export-pdf" target="_blank" rel="noopener">PDF</a>
+            <a class="btn" id="treso-export-xlsx">Excel (.xlsx)</a>
+            <a class="btn" id="treso-export-csv">CSV</a>
+            <span class="sub">Cliquez sur un classeur pour voir ses transactions.</span>
+          </div>
+          <div class="table-wrap">
+            <table class="liste cr">
+              <thead>
+                <tr><th>Catégorie / Classeur</th><th class="num">Charges</th><th class="num">Produits</th><th class="num">Balance</th></tr>
+              </thead>
+              <tbody id="treso-cr"></tbody>
+            </table>
+          </div>
+          <p class="sub" id="treso-controle"></p>
+        </div>
+        <div data-f="detail-vue" hidden>
+          <div class="liste-entete">
+            <button class="btn" type="button" id="treso-retour">← Retour au compte de résultat</button>
+          </div>
+          <h3 id="treso-detail-titre"></h3>
+          <p class="sub" id="treso-detail-resume"></p>
+          <div class="table-wrap">
+            <table class="liste">
+              <thead>
+                <tr><th>Date</th><th>Nature</th><th>Motif</th><th class="num">Montant</th><th>Commentaire</th><th>Justificatifs</th></tr>
+              </thead>
+              <tbody id="treso-detail"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="carte" data-sous-vue="reglages" hidden>
+        <form id="treso-form-mandat" class="editeur" novalidate>
+          <h3>Nouveau mandat</h3>
+          <div class="grille">
+            <label class="field"><span>Nom *</span><input name="nom" required maxlength="50" placeholder="2027 - 2028"></label>
+            <label class="field"><span>Début *</span><input name="debut" type="date" required></label>
+            <label class="field"><span>Fin *</span><input name="fin" type="date" required></label>
+          </div>
+          <label class="case"><input type="checkbox" name="copier" checked> Reprendre les classeurs du mandat sélectionné</label>
+          <div><button class="btn primary" type="submit">Créer le mandat</button></div>
+        </form>
+        <form id="treso-form-classeur" class="editeur" novalidate>
+          <h3>Ajouter un classeur au mandat sélectionné</h3>
+          <div class="grille">
+            <label class="field"><span>Catégorie *</span><select name="categorie_id" required></select></label>
+            <label class="field large"><span>Nom du classeur *</span><input name="nom" required maxlength="150" placeholder="Soirée jeux de société"></label>
+          </div>
+          <div><button class="btn" type="submit">Ajouter le classeur</button></div>
+        </form>
+        <h3 id="treso-classeurs-titre">Classeurs du mandat</h3>
+        <div id="treso-classeurs" class="classeurs"></div>
+      </section>
+    </div>
   </main>
 
   <footer class="credit">
@@ -539,6 +634,34 @@
         <button class="btn ghost" type="button" data-close>Fermer</button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="dlg-operation" class="large">
+    <form id="form-operation" method="dialog" novalidate>
+      <h2>Modifier la transaction</h2>
+      <p class="resume-operation" data-f="resume"></p>
+      <div class="grille">
+        <label class="field large"><span>Motif</span><input name="libelle" maxlength="300"></label>
+        <label class="field"><span>Dossier (catégorie)</span><select name="categorie"></select></label>
+        <label class="field"><span>Étiquette (classeur)</span><select name="classeur_id"></select></label>
+        <label class="field large"><span>Commentaire</span><textarea name="commentaire" rows="2" maxlength="1000"></textarea></label>
+      </div>
+      <h3>Justificatifs</h3>
+      <ul class="justifs" data-f="justificatifs"></ul>
+      <div class="justif-actions">
+        <label class="btn ghost">Ajouter un fichier<input type="file" data-f="fichier" hidden></label>
+        <span class="inline joindre">
+          <select data-f="document" aria-label="Note de frais ou facture à joindre"></select>
+          <button class="btn" type="button" data-f="joindre">Joindre</button>
+        </span>
+      </div>
+      <p class="sub" data-f="aide"></p>
+      <p class="erreur" data-f="erreur" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" data-close>Fermer</button>
+        <button class="btn primary" type="submit">Enregistrer</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="dlg-association" class="large">

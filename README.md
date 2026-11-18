@@ -43,6 +43,28 @@ bandeau gris, pied de page avec SIRET et contacts). Tout est gardé dans la base
   contacts du pied de page, IBAN, conditions de paiement, préfixes des numéros. Modifiables par
   un administrateur.
 
+## Trésorerie
+
+Onglet repris de l'application [AML Trésorerie](https://github.com/AILANE-AMAR/AML-TRESO)
+(Java + PostgreSQL), refait en Python dans la même base SQLite.
+
+- **Transactions** : import du relevé bancaire CSV du mois (séparateur `;` ou `,`, UTF-8 ou
+  Latin-1, colonnes Date, Libellé ou Motif, Nature, Montant ou Débit + Crédit ; le texte après
+  `MOTIF:` des lignes de suite devient le libellé). Réimporter un fichier ne crée pas de doublon.
+  Chaque transaction se classe dans un dossier (catégorie) et une étiquette (classeur) du mandat,
+  avec un commentaire et des justificatifs.
+- **Justificatifs** : fichiers gardés dans la base (et copiés sur Nextcloud dans
+  `<mandat>/[3] Trésorerie/<catégorie>/<classeur>/` si Nextcloud est configuré), ou une **note de
+  frais / une facture de l'application** : celles du même montant sont proposées d'abord ; la note
+  jointe à un débit passe à « Remboursée », la facture jointe à un crédit à « Payée ».
+- **Compte de résultat** par mandat : catégorie › classeur, charges, produits, balance, bloc
+  « hors compte de résultat », lignes non classées et contrôle avec le solde du relevé ; clic sur
+  un classeur pour voir ses transactions ; export **PDF**, **Excel** (couleurs) et **CSV**.
+- **Mandats et classeurs** : nouveau mandat (avec reprise des classeurs du mandat choisi), ajout
+  d'un classeur, suppression d'un classeur vide.
+- Reprise des mandats, catégories et classeurs d'AML Trésorerie (export JSON de sa base) :
+  `python manage.py reprendre-tresorerie fichier.json` (refusée s'il y a déjà des transactions).
+
 ## Mise en ligne
 
 Docker, Python seul ou hébergement « Python App », reverse proxy HTTPS, sous-domaine ou

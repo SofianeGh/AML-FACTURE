@@ -18,6 +18,7 @@ from .commun import log
 from .config import NEXTCLOUD_DEFAUT, RACINE, TAILLE_MAX, cle_secrete, dossier_donnees, env_bool
 from .routes import BLUEPRINTS
 from .stockage import Stockage
+from .treso import Tresorerie
 
 
 def create_app(dossier=None):
@@ -40,6 +41,7 @@ def create_app(dossier=None):
     )
     stockage = Stockage(dossier / "aml-factures.db")
     app.extensions["stockage"] = stockage
+    app.extensions["treso"] = Tresorerie(stockage)
 
     # Derrière un reverse proxy (nginx, Apache, Traefik…) : nombre de proxys de confiance.
     # Prend en compte X-Forwarded-For/Proto/Host/Prefix (hébergement dans un sous-dossier, ex. /factures).

@@ -3,7 +3,7 @@ import { api, postJSON, putJSON } from "./api.js";
 import { association } from "./association.js";
 import { surOnglet } from "./onglets.js";
 import { Signature } from "./signature.js";
-import { $, alerte, aujourdhui, dateFr, el, eur, lien, nombreSaisi, ouvrirApresEnregistrement } from "./outils.js";
+import { $, alerte, aujourdhui, dateFr, el, eur, lien, nombreSaisi, ouvrirApresEnregistrement, rapprochement } from "./outils.js";
 
 const STATUTS = { a_rembourser: ["À rembourser", "st-attente"], remboursee: ["Remboursée", "st-ok"] };
 const CHAMPS = ["civilite", "prenom", "nom", "naissance_date", "naissance_lieu", "qualite", "association", "adresse",
@@ -73,7 +73,7 @@ function ligneListe(n) {
   return el("tr", {},
     el("td", { class: "num" }, dateFr(n.date)),
     el("td", {}, n.personne),
-    el("td", {}, n.objet, el("span", { class: "sub" }, pj)),
+    el("td", {}, n.objet, el("span", { class: "sub" }, pj), rapprochement(n.rapprochements)),
     el("td", { class: "num" }, eur.format(n.total_ttc)),
     el("td", {}, suivi),
     el("td", { class: "actions" },

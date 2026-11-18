@@ -7,7 +7,7 @@ from flask import Blueprint, g, jsonify, request, send_file
 from ..aml.association import association, lire_association
 from ..aml.champs import date_iso
 from ..aml.devis import STATUTS, TYPES, calculer, lire_numero, lire_piece, nom_fichier, numero_de
-from ..commun import RequeteInvalide, erreur, log, stockage
+from ..commun import RequeteInvalide, erreur, log, stockage, tresorerie
 from ..pdf.devis import generer_piece
 from ..securite import admin_requis
 
@@ -39,7 +39,10 @@ def ecrire_coordonnees():
 
 @bp.get("/api/devis")
 def lister():
-    return jsonify(stockage().lister_pieces())
+    """Devis et factures ; pour une facture, les transactions de la trésorerie où elle est jointe."""
+    liens = tresorerie().rapprochements("facture")
+    return jsonify([{**p, "rapprochements": liens.get(p["id"], []) if p["type"] == "facture" else []}
+                    for p in stockage().lister_pieces()])
 
 
 @bp.get("/api/devis/clients")
@@ -130,8 +133,14 @@ def supprimer(id_):
         raise RequeteInvalide("Seule la dernière facture de l'année peut être supprimée : les numéros de facture "
                               "doivent se suivre sans trou. Pour annuler celle-ci, faites une facture d'avoir.")
     stockage().supprimer_piece(id_)
+    tresorerie().retirer_liens("facture", id_)
     log.info("%s a supprimé %s %s", g.utilisateur["nom"], TYPES[piece["type"]].lower(), piece["numero"])
     return jsonify({"ok": True})
+
+
+def pdf_piece(piece):
+    """(PDF, nom du fichier) d'un devis ou d'une facture."""
+    return generer_piece(piece, calculer(piece), association()), nom_fichier(piece)
 
 
 @bp.get("/api/devis/<int:id_>/pdf")
@@ -140,6 +149,6 @@ def pdf(id_):
     piece = stockage().piece(id_)
     if piece is None:
         return "Document introuvable.", 404, TEXTE
-    contenu = generer_piece(piece, calculer(piece), association())
-    return send_file(io.BytesIO(contenu), mimetype="application/pdf", download_name=nom_fichier(piece),
+    contenu, nom = pdf_piece(piece)
+    return send_file(io.BytesIO(contenu), mimetype="application/pdf", download_name=nom,
                      as_attachment=request.args.get("telecharger") == "1")

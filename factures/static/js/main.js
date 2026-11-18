@@ -10,6 +10,7 @@ import { $, alerte, state } from "./outils.js";
 import "./association.js";
 import "./ndf.js";
 import "./devis.js";
+import "./treso.js";
 
 champsReglages.forEach((champ) => champ.addEventListener("input", recalcAll));
 

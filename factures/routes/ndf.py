@@ -6,7 +6,7 @@ from flask import Blueprint, g, jsonify, request, send_file
 
 from ..aml.association import association
 from ..aml.ndf import STATUTS, lire_note, lire_signature, nom_fichier, preparer_justificatif, resume
-from ..commun import RequeteInvalide, erreur, log, stockage
+from ..commun import RequeteInvalide, erreur, log, stockage, tresorerie
 from ..pdf.ndf import generer_ndf
 
 bp = Blueprint("ndf", __name__)
@@ -15,7 +15,9 @@ TEXTE = {"Content-Type": "text/plain; charset=utf-8"}
 
 @bp.get("/api/ndf")
 def lister():
-    return jsonify(stockage().lister_ndf())
+    """Notes de frais, avec les transactions de la trésorerie où elles sont jointes (« rapprochements »)."""
+    liens = tresorerie().rapprochements("ndf")
+    return jsonify([{**n, "rapprochements": liens.get(n["id"], [])} for n in stockage().lister_ndf()])
 
 
 @bp.get("/api/ndf/<int:id_>")
@@ -66,8 +68,17 @@ def supprimer(id_):
     if note is None:
         return erreur("Note de frais introuvable.", 404)
     stockage().supprimer_ndf(id_)
+    tresorerie().retirer_liens("ndf", id_)
     log.info("%s a supprimé la note de frais n° %s", g.utilisateur["nom"], id_)
     return jsonify({"ok": True})
+
+
+def pdf_note(note):
+    """(PDF, nom du fichier) d'une note de frais, avec ses justificatifs en annexe."""
+    images = stockage().images_justificatifs([j for d in note["depenses"] for j in d["justificatifs"]])
+    annexes = [(i, images[j]) for i, d in enumerate(note["depenses"]) for j in d["justificatifs"] if j in images]
+    asso = association()
+    return generer_ndf(note, asso, note["signature"], annexes), nom_fichier(note, asso["sigle"])
 
 
 @bp.get("/api/ndf/<int:id_>/pdf")
@@ -76,11 +87,8 @@ def pdf(id_):
     note = stockage().note_frais(id_)
     if note is None:
         return "Note de frais introuvable.", 404, TEXTE
-    images = stockage().images_justificatifs([j for d in note["depenses"] for j in d["justificatifs"]])
-    annexes = [(i, images[j]) for i, d in enumerate(note["depenses"]) for j in d["justificatifs"] if j in images]
-    asso = association()
-    contenu = generer_ndf(note, asso, note["signature"], annexes)
-    return send_file(io.BytesIO(contenu), mimetype="application/pdf", download_name=nom_fichier(note, asso["sigle"]),
+    contenu, nom = pdf_note(note)
+    return send_file(io.BytesIO(contenu), mimetype="application/pdf", download_name=nom,
                      as_attachment=request.args.get("telecharger") == "1")
 
 

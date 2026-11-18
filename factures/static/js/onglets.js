@@ -1,6 +1,6 @@
-// Onglets du haut : Factures METRO, Notes de frais, Devis et factures.
-// L'onglet ouvert est noté dans l'adresse (#ndf, #devis) pour être retrouvé en rechargeant la page.
-const ONGLETS = { metro: "Factures METRO", ndf: "Notes de frais", devis: "Devis et factures" };
+// Onglets du haut : Factures METRO, Notes de frais, Devis et factures, Trésorerie.
+// L'onglet ouvert est noté dans l'adresse (#ndf, #devis, #treso) pour être retrouvé en rechargeant la page.
+const ONGLETS = { metro: "Factures METRO", ndf: "Notes de frais", devis: "Devis et factures", treso: "Trésorerie" };
 const ecouteurs = {};
 let actif = null;
 

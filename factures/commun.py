@@ -25,6 +25,11 @@ def stockage():
     return current_app.extensions["stockage"]
 
 
+def tresorerie():
+    """Tables de la trésorerie (mandats, classeurs, transactions), dans la même base."""
+    return current_app.extensions["treso"]
+
+
 def lire_conducteur(texte):
     """Nom du conducteur de la course : obligatoire pour envoyer sur Nextcloud."""
     nom = " ".join(str(texte or "").split())

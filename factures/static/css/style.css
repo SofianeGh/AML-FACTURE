@@ -466,3 +466,55 @@ dialog.large .grille { grid-template-columns: repeat(auto-fill, minmax(200px, 1f
   .grille .large { grid-column: auto; }
   .carte { padding: 14px; }
 }
+
+/* ================================================================
+   Trésorerie : transactions, compte de résultat, mandats et classeurs
+   ================================================================ */
+.sous-onglets { display: flex; gap: 4px; margin-top: 14px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.sous-onglets button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 500; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+.sous-onglets button:hover { color: var(--text); }
+.sous-onglets button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--primary); }
+#treso-message { display: block; min-height: 1.4em; margin-top: 8px; }
+.liste-entete { align-items: center; }
+.resume-liste { margin-left: auto; }
+.num.negatif, strong.negatif, .negatif { color: var(--ko); }
+.num.positif, strong.positif, .positif { color: var(--ok); }
+table.liste tr.a-classer td:first-child { box-shadow: inset 3px 0 var(--accent-text); }
+table.liste .desig { display: block; }
+.pastille.st-attente { margin-right: 6px; }
+
+/* compte de résultat */
+table.cr tr.cr-categorie td { background: var(--surface-2); font-weight: 600; }
+table.cr tr.cr-classeur td:first-child { padding-left: 26px; }
+table.cr tr.cliquable { cursor: pointer; }
+table.cr tr.cliquable:hover td, table.cr tr.cliquable:focus-visible td { background: var(--primary-soft); }
+table.cr tr.cliquable:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+table.cr tr.cr-total td { font-weight: 600; border-top: 1px solid var(--border-strong); border-bottom: 2px solid var(--border-strong); }
+table.cr tr.cr-non-classe td { color: var(--muted); font-style: italic; }
+td.justifs-liste a { display: block; font-size: 13px; }
+
+/* fenêtre « Modifier la transaction » */
+.resume-operation { margin: 0; padding: 8px 12px; background: var(--surface-2); border-radius: 4px; font-size: 13.5px; }
+dialog h3 { margin: 6px 0 0; font-size: 14px; font-weight: 600; }
+.justifs { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 4px; }
+.justifs li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 10px; font-size: 13.5px; }
+.justifs li + li { border-top: 1px solid var(--border); }
+.justifs a { overflow-wrap: anywhere; color: var(--primary); }
+.justif-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.justif-actions .joindre { flex: 1; min-width: 240px; }
+.justif-actions select { flex: 1; min-width: 0; }
+dialog select:disabled { opacity: 0.6; }
+
+/* mandats et classeurs */
+[data-sous-vue="reglages"] h3 { margin: 18px 0 10px; font-size: 14px; font-weight: 600; }
+[data-sous-vue="reglages"] form h3 { margin-top: 4px; }
+[data-sous-vue="reglages"] form + form { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--border); }
+.classeurs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px 18px; }
+.classeurs h4 { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.classeurs ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 4px; }
+.classeurs li { display: flex; gap: 8px; align-items: baseline; padding: 4px 10px; font-size: 13.5px; }
+.classeurs li + li { border-top: 1px solid var(--border); }
+.classeurs li > span:first-child { flex: 1; }
+
+/* rapprochement avec la trésorerie (listes NDF et factures) */
+.rapproche { color: var(--ok); }
