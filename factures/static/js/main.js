@@ -1,11 +1,15 @@
-// Démarrage de la page : chargement des réglages, dépôt des factures, fenêtres.
+// Démarrage de la page : chargement des réglages, dépôt des factures, fenêtres, onglets.
 import { api, store } from "./api.js";
 import { afficherReglages, champsReglages } from "./calculs.js";
 import { majSession } from "./comptes.js";
 import { ajouterFichiers, recalcAll } from "./facture.js";
 import { majDossier } from "./dossiers.js";
 import { afficherConducteurs } from "./nextcloud.js";
+import { ongletActif } from "./onglets.js";
 import { $, alerte, state } from "./outils.js";
+import "./association.js";
+import "./ndf.js";
+import "./devis.js";
 
 champsReglages.forEach((champ) => champ.addEventListener("input", recalcAll));
 
@@ -33,7 +37,8 @@ dropzone.addEventListener("drop", (e) => {
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => {
   e.preventDefault();
-  if (e.dataTransfer?.files?.length) ajouterFichiers([...e.dataTransfer.files]);
+  // ailleurs que dans l'onglet METRO, un fichier lâché à côté d'une zone de dépôt est ignoré
+  if (ongletActif() === "metro" && e.dataTransfer?.files?.length) ajouterFichiers([...e.dataTransfer.files]);
 });
 
 // ---------------------------------------------------------------- démarrage

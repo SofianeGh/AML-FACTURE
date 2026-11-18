@@ -9,7 +9,7 @@ from flask import g, redirect, request, session, url_for
 from .commun import RequeteInvalide, erreur, log, stockage
 from .config import connexion_active
 from .nextcloud import NextcloudError
-from .stockage import ErreurCompte
+from .stockage import ErreurCompte, ErreurDonnees
 
 PAGES_PUBLIQUES = {"comptes.page_connexion", "comptes.connexion", "static"}
 
@@ -99,6 +99,10 @@ def installer(app):
 
     @app.errorhandler(ErreurCompte)
     def _erreur_compte(exc):
+        return erreur(str(exc), 400)
+
+    @app.errorhandler(ErreurDonnees)
+    def _erreur_donnees(exc):
         return erreur(str(exc), 400)
 
     @app.errorhandler(NextcloudError)

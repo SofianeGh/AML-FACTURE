@@ -21,6 +21,10 @@ export const postJSON = (url, body) => api(url, {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
 
+export const putJSON = (url, body) => api(url, {
+  method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+});
+
 // Préférences partagées entre tous les membres (marge, taxe TPE, arrondi ; par article :
 // pièces, prix choisi, catégorie Local ; noms des conducteurs). Chargées au démarrage,
 // enregistrées sur le serveur par petits lots (une requête pour plusieurs frappes).

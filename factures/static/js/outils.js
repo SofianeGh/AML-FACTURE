@@ -1,6 +1,38 @@
-// Outils partagés : accès au DOM, mise en forme des nombres, état de la page.
+// Outils partagés : accès au DOM, mise en forme des nombres et des dates, état de la page.
 
 export const $ = (sel, root = document) => root.querySelector(sel);
+
+// Dates au format des champs date (« AAAA-MM-JJ »), en heure locale
+const isoLocal = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+export const aujourdhui = () => isoLocal(new Date());
+export function plusJours(iso, jours) {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + jours);
+  return isoLocal(d);
+}
+export const dateFr = (iso) => (iso ? iso.split("-").reverse().join("/") : "");
+
+// Nombre saisi (« 8,50 » accepté) ; 0 si vide ou illisible
+export function nombreSaisi(valeur) {
+  const n = parseFloat(String(valeur ?? "").replace(/[\s ]/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Bouton d'apparence « lien » qui appelle `action`
+export function lien(texte, action, attrs = {}) {
+  const b = el("button", { class: "lien", type: "button", ...attrs }, texte);
+  b.addEventListener("click", action);
+  return b;
+}
+
+// Ouvre un PDF dans un nouvel onglet une fois `enregistrer()` terminé (qui renvoie l'adresse ou null).
+// L'onglet est ouvert tout de suite, pendant le clic, pour ne pas être bloqué par le navigateur.
+export async function ouvrirApresEnregistrement(enregistrer) {
+  const onglet = window.open("", "_blank");
+  const adresse = await enregistrer();
+  if (adresse && onglet) onglet.location.href = new URL(adresse, location.href).href;
+  else if (onglet) onglet.close();
+}
 
 export function el(tag, attrs = {}, ...enfants) {
   const node = document.createElement(tag);

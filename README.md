@@ -25,6 +25,24 @@ voir **[docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md)**.
   connexion Nextcloud. Marge, taxe TPE, arrondi et prix choisis sont **partagés** entre tous.
 - Plusieurs factures à la fois (glisser-déposer), thème clair / sombre automatique.
 
+## Notes de frais, devis et factures de l'association
+
+Deux onglets en plus de « Factures METRO », avec des PDF à la mise en page de l'AML (logo,
+bandeau gris, pied de page avec SIRET et contacts). Tout est gardé dans la base (`data/`).
+
+- **Notes de frais** : attestation sur l'honneur (personne, dépenses, fournisseurs, montants),
+  signature dessinée à la souris ou au doigt (ou image importée ; sans signature, le cadre reste
+  vide pour signer à la main), justificatifs en photo ou en PDF (une page d'annexe par image).
+  Suivi « À rembourser / Remboursée » ; « Dupliquer » reprend la personne et sa signature.
+- **Devis et factures** : numérotés `AML-D-AAAA-001` et `AML-F-AAAA-001` (le rang repart à 1
+  chaque année ; numéro modifiable), client (les clients déjà utilisés sont proposés), objet,
+  lieu, lignes avec TVA « non applicable » par défaut (ou 0 / 5,5 / 10 / 20 %). Un devis se
+  transforme en facture d'un clic (le devis passe alors à « Accepté »). Seule la dernière facture
+  de l'année peut être supprimée, pour que les numéros se suivent sans trou.
+- **Infos de l'association** (bouton dans les deux onglets) : adresse, SIRET, mention TVA,
+  contacts du pied de page, IBAN, conditions de paiement, préfixes des numéros. Modifiables par
+  un administrateur.
+
 ## Mise en ligne
 
 Docker, Python seul ou hébergement « Python App », reverse proxy HTTPS, sous-domaine ou

@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Factures METRO</title>
+  <title>AML Factures</title>
   <link rel="stylesheet" href="static/css/style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1>Factures METRO</h1>
+      <h1>AML Factures</h1>
       <p class="session">
         <span id="utilisateur">…</span>
         · <button id="btn-mdp" class="lien" type="button">Mot de passe</button>
@@ -18,7 +18,7 @@
       </p>
     </div>
 
-    <div class="controls">
+    <div class="controls" data-seulement="metro">
       <label class="field">
         <span>Marge</span>
         <span class="inline">
@@ -56,11 +56,18 @@
         </span>
       </div>
     </div>
+
+    <nav class="onglets" role="tablist" aria-label="Sections">
+      <button type="button" role="tab" data-onglet="metro" aria-selected="true">Factures METRO</button>
+      <button type="button" role="tab" data-onglet="ndf" aria-selected="false">Notes de frais</button>
+      <button type="button" role="tab" data-onglet="devis" aria-selected="false">Devis et factures</button>
+    </nav>
   </header>
 
   <main>
     <div id="alerte" class="alerte" role="alert" hidden></div>
 
+    <div class="vue" data-vue="metro" role="tabpanel">
     <label id="dropzone" class="dropzone">
       <input id="fichiers" type="file" accept="application/pdf,.pdf" multiple hidden>
       <strong>Déposez vos factures METRO (PDF) ici</strong>
@@ -74,6 +81,248 @@
     <datalist id="liste-conducteurs"></datalist>
 
     <div id="factures"></div>
+    </div>
+
+    <!-- ============================================================ notes de frais -->
+    <div class="vue" data-vue="ndf" role="tabpanel" hidden>
+      <div class="barre-vue">
+        <div>
+          <h2>Notes de frais</h2>
+          <p class="meta">Attestation sur l'honneur pour se faire rembourser une dépense payée pour l'AML, signée, avec les justificatifs en annexe.</p>
+        </div>
+        <div class="inline">
+          <button class="btn ghost" type="button" data-action="association">Infos de l'association</button>
+          <button class="btn primary" type="button" id="ndf-nouvelle">Nouvelle note de frais</button>
+        </div>
+      </div>
+
+      <section class="carte" id="ndf-editeur" hidden>
+        <form id="form-ndf" class="editeur" novalidate>
+          <div class="editeur-entete">
+            <h2 data-f="titre">Nouvelle note de frais</h2>
+            <button class="btn ghost" type="button" data-f="fermer">Fermer</button>
+          </div>
+
+          <fieldset>
+            <legend>Personne qui a payé</legend>
+            <div class="grille">
+              <label class="field"><span>Civilité</span>
+                <select name="civilite"><option value="M.">M.</option><option value="Mme">Mme</option></select></label>
+              <label class="field"><span>Prénom *</span><input name="prenom" required maxlength="60" autocomplete="off"></label>
+              <label class="field"><span>Nom *</span><input name="nom" required maxlength="60" autocomplete="off"></label>
+              <label class="field"><span>Né(e) le *</span><input name="naissance_date" type="date" required></label>
+              <label class="field large"><span>à (lieu de naissance) *</span><input name="naissance_lieu" required maxlength="120" placeholder="Lyon 7e arrondissement (69007)"></label>
+              <label class="field"><span>Qualité *</span><input name="qualite" required maxlength="60" list="ndf-qualites" placeholder="membre"></label>
+              <label class="field"><span>de l'association *</span><input name="association" required maxlength="80" placeholder="AML"></label>
+              <label class="field large"><span>Adresse *</span><input name="adresse" required maxlength="200" placeholder="12 rue des Lilas, 69007 Lyon"></label>
+            </div>
+            <datalist id="ndf-qualites">
+              <option value="membre"></option><option value="bénévole"></option><option value="trésorier"></option>
+              <option value="trésorière"></option><option value="président"></option><option value="présidente"></option>
+            </datalist>
+          </fieldset>
+
+          <fieldset>
+            <legend>Dépenses</legend>
+            <div class="grille">
+              <label class="field"><span>Dépenses (en gras) *</span><input name="nature" required maxlength="150" placeholder="8 pizzas et boissons"></label>
+              <label class="field" title="Texte entre les dépenses et l'événement : adaptez l'accord (réglées, achetés…) et l'article (de l', de la, du…)"><span>Liaison</span><input name="liaison" maxlength="80" placeholder="réglés à l'occasion de l'"></label>
+              <label class="field large"><span>Événement (en gras) *</span><input name="evenement" required maxlength="200" placeholder="soirée jeux de société de l'AML"></label>
+            </div>
+            <p class="apercu-phrase" data-f="phrase"></p>
+            <div class="table-wrap">
+              <table class="lignes">
+                <thead>
+                  <tr>
+                    <th>Fournisseur (nom, adresse)</th>
+                    <th>Date</th>
+                    <th>N° de reçu</th>
+                    <th class="num">Montant TTC</th>
+                    <th title="Photo du ticket ou PDF de la facture : une page d'annexe par image">Justificatifs</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody data-f="depenses"></tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="3"><button class="lien" type="button" data-f="ajouter-depense">+ Ajouter une dépense</button></td>
+                    <td class="num" data-f="total"></td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Signature et suivi</legend>
+            <div class="grille">
+              <label class="field"><span>Fait à *</span><input name="fait_a" required maxlength="60"></label>
+              <label class="field"><span>le *</span><input name="fait_le" type="date" required></label>
+              <label class="field"><span>Suivi</span>
+                <select name="statut"><option value="a_rembourser">À rembourser</option><option value="remboursee">Remboursée</option></select></label>
+            </div>
+            <div class="signature">
+              <canvas data-f="signature" width="700" height="240" aria-label="Zone de signature"></canvas>
+              <div class="inline signature-actions">
+                <button class="btn ghost" type="button" data-f="effacer-signature">Effacer</button>
+                <label class="btn ghost">Importer une image<input type="file" accept="image/png,image/jpeg" data-f="importer-signature" hidden></label>
+                <span class="sub">Signez avec la souris ou le doigt. Sans signature, le cadre reste vide pour signer à la main.</span>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="editeur-actions">
+            <button class="btn primary" type="submit">Enregistrer</button>
+            <button class="btn" type="button" data-f="pdf">Enregistrer et voir le PDF</button>
+            <span class="statut" data-f="statut" role="status"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="carte">
+        <div class="liste-entete">
+          <input id="ndf-recherche" type="search" placeholder="Rechercher (personne, événement)" aria-label="Rechercher">
+          <select id="ndf-filtre" aria-label="Filtrer">
+            <option value="">Toutes</option>
+            <option value="a_rembourser">À rembourser</option>
+            <option value="remboursee">Remboursées</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="liste">
+            <thead>
+              <tr><th>Date</th><th>Personne</th><th>Événement</th><th class="num">Montant</th><th>Suivi</th><th></th></tr>
+            </thead>
+            <tbody id="ndf-liste"></tbody>
+          </table>
+        </div>
+        <p class="vide" id="ndf-vide">Chargement…</p>
+      </section>
+    </div>
+
+    <!-- ============================================================ devis et factures -->
+    <div class="vue" data-vue="devis" role="tabpanel" hidden>
+      <div class="barre-vue">
+        <div>
+          <h2>Devis et factures</h2>
+          <p class="meta">Numérotés automatiquement ; un devis accepté se transforme en facture en un clic.</p>
+        </div>
+        <div class="inline">
+          <button class="btn ghost" type="button" data-action="association">Infos de l'association</button>
+          <button class="btn" type="button" id="devis-nouveau">Nouveau devis</button>
+          <button class="btn primary" type="button" id="facture-nouvelle">Nouvelle facture</button>
+        </div>
+      </div>
+
+      <section class="carte" id="devis-editeur" hidden>
+        <form id="form-devis" class="editeur" novalidate>
+          <div class="editeur-entete">
+            <h2 data-f="titre">Nouveau devis</h2>
+            <button class="btn ghost" type="button" data-f="fermer">Fermer</button>
+          </div>
+          <p class="sub" data-f="source" hidden></p>
+
+          <fieldset>
+            <legend>Document</legend>
+            <div class="grille">
+              <label class="field"><span>Numéro *</span><input name="numero" required maxlength="40" class="mono" autocomplete="off"></label>
+              <label class="field"><span>Date *</span><input name="date" type="date" required></label>
+              <label class="field" data-pour="devis"><span>Valable jusqu'au</span><input name="validite" type="date"></label>
+              <label class="field" data-pour="facture"><span>Échéance</span><input name="echeance" type="date"></label>
+              <label class="field"><span>Nature</span>
+                <select name="nature">
+                  <option>Prestation de services</option>
+                  <option>Vente de marchandises</option>
+                  <option>Prestation de services et vente</option>
+                </select></label>
+              <label class="field"><span>Suivi</span><select name="statut"></select></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Client</legend>
+            <div class="grille">
+              <label class="field large"><span>Client déjà enregistré</span><select data-f="clients"></select></label>
+              <label class="field large"><span>Nom * (1 à 3 lignes, en gras)</span><textarea name="client_nom" rows="2" required maxlength="200" placeholder="Bureau des étudiants&#10;Association EXEMPLE'ASSO"></textarea></label>
+              <label class="field large"><span>Adresse</span><textarea name="client_adresse" rows="4" maxlength="300" placeholder="Maison des associations&#10;10 rue de l'Exemple&#10;69003 Lyon&#10;France"></textarea></label>
+              <label class="field"><span>Téléphone</span><input name="client_telephone" maxlength="40" type="tel"></label>
+              <label class="field"><span>E-mail</span><input name="client_email" maxlength="120" type="email"></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Prestation</legend>
+            <div class="grille">
+              <label class="field large"><span>Objet</span><input name="objet" maxlength="200" placeholder="Prestation du samedi 12 décembre 2026"></label>
+              <label class="field large"><span>Lieu</span><textarea name="lieu" rows="2" maxlength="300" placeholder="Salle polyvalente&#10;69100 Villeurbanne"></textarea></label>
+              <label class="field large"><span>Description</span><textarea name="description" rows="2" maxlength="600" placeholder="Buffet - 50 formules sandwich et 50 boissons"></textarea></label>
+            </div>
+            <div class="table-wrap">
+              <table class="lignes">
+                <thead>
+                  <tr>
+                    <th>Désignation</th>
+                    <th class="num">Prix HT</th>
+                    <th class="num">Quantité</th>
+                    <th>TVA</th>
+                    <th class="num">Total HT</th>
+                    <th class="num">Total TTC</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody data-f="lignes"></tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="4"><button class="lien" type="button" data-f="ajouter-ligne">+ Ajouter une ligne</button></td>
+                    <td class="num">Total HT</td>
+                    <td class="num" data-f="total-ht"></td>
+                    <td></td>
+                  </tr>
+                  <tr><td colspan="5" class="num">Total TVA</td><td class="num" data-f="total-tva"></td><td></td></tr>
+                  <tr class="benefice"><td colspan="5" class="num">Total TTC</td><td class="num" data-f="total-ttc"></td><td></td></tr>
+                </tfoot>
+              </table>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Mentions</legend>
+            <div class="grille">
+              <label class="field large" data-pour="facture"><span>Conditions de paiement</span><textarea name="conditions" rows="2" maxlength="400"></textarea></label>
+              <label class="field large"><span>Note imprimée sous les totaux (facultatif)</span><textarea name="notes" rows="2" maxlength="800"></textarea></label>
+            </div>
+          </fieldset>
+
+          <div class="editeur-actions">
+            <button class="btn primary" type="submit">Enregistrer</button>
+            <button class="btn" type="button" data-f="pdf">Enregistrer et voir le PDF</button>
+            <button class="btn" type="button" data-f="transformer" hidden>Transformer en facture</button>
+            <span class="statut" data-f="statut" role="status"></span>
+          </div>
+        </form>
+      </section>
+
+      <section class="carte">
+        <div class="liste-entete">
+          <input id="devis-recherche" type="search" placeholder="Rechercher (numéro, client, objet)" aria-label="Rechercher">
+          <select id="devis-filtre" aria-label="Filtrer">
+            <option value="">Devis et factures</option>
+            <option value="devis">Devis</option>
+            <option value="facture">Factures</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="liste">
+            <thead>
+              <tr><th>Numéro</th><th>Date</th><th>Client</th><th>Objet</th><th class="num">Total TTC</th><th>Suivi</th><th></th></tr>
+            </thead>
+            <tbody id="devis-liste"></tbody>
+          </table>
+        </div>
+        <p class="vide" id="devis-vide">Chargement…</p>
+      </section>
+    </div>
   </main>
 
   <footer class="credit">
@@ -290,6 +539,37 @@
         <button class="btn ghost" type="button" data-close>Fermer</button>
       </div>
     </div>
+  </dialog>
+
+  <dialog id="dlg-association" class="large">
+    <form id="form-association" method="dialog">
+      <h2>Infos de l'association</h2>
+      <p class="sub">Imprimées sur les devis, les factures et les notes de frais. <span data-f="lecture" hidden>Seul un administrateur peut les modifier.</span></p>
+      <div class="grille">
+        <label class="field"><span>Sigle *</span><input name="sigle" required maxlength="20"></label>
+        <label class="field large"><span>Nom complet *</span><input name="nom" required maxlength="120"></label>
+        <label class="field large"><span>Adresse</span><input name="adresse" maxlength="150"></label>
+        <label class="field"><span>Code postal et ville</span><input name="ville" maxlength="80"></label>
+        <label class="field"><span>Pays</span><input name="pays" maxlength="40"></label>
+        <label class="field"><span>SIRET</span><input name="siret" maxlength="30"></label>
+        <label class="field large"><span>Mention TVA</span><input name="mention_tva" maxlength="150"></label>
+        <label class="field large"><span>Contacts (bas de page, une ligne par personne)</span><textarea name="contacts" rows="3" maxlength="400"></textarea></label>
+        <label class="field large"><span>IBAN (imprimé sur les factures)</span><input name="iban" maxlength="50" class="mono"></label>
+        <label class="field"><span>BIC</span><input name="bic" maxlength="15" class="mono"></label>
+        <label class="field"><span>Ville de signature (NDF)</span><input name="ville_signature" maxlength="60"></label>
+        <label class="field"><span>Préfixe des devis *</span><input name="prefixe_devis" required maxlength="20" class="mono"></label>
+        <label class="field"><span>Préfixe des factures *</span><input name="prefixe_facture" required maxlength="20" class="mono"></label>
+        <label class="field"><span>Validité d'un devis (jours)</span><input name="validite_jours" type="number" min="0" max="365"></label>
+        <label class="field"><span>Échéance d'une facture (jours)</span><input name="echeance_jours" type="number" min="0" max="365"></label>
+        <label class="field large"><span>Conditions de paiement (factures)</span><textarea name="conditions_facture" rows="2" maxlength="400"></textarea></label>
+        <label class="field large"><span>Mention en cas de retard (factures)</span><textarea name="mention_retard" rows="3" maxlength="500"></textarea></label>
+      </div>
+      <p class="erreur" data-f="erreur" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" type="button" data-close>Fermer</button>
+        <button class="btn primary" type="submit" data-f="enregistrer">Enregistrer</button>
+      </div>
+    </form>
   </dialog>
 
   <script type="module" src="static/js/main.js"></script>
