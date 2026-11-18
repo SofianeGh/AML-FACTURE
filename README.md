@@ -249,10 +249,10 @@ factures) ; sans eux, ces tests sont ignorés.
 
 ## Auteurs
 
-Fait par **[Sofiane Abichou](https://github.com/SofianeGh)** — Local Stock, mandat 2025/2026.
+Fait par **[Sofiane Abichou](https://github.com/SofianeGh)** — Local Stock, mandat 2025/2026 · Trésorerie, mandat 2026/2027.
 
-Co-auteur : **[Amar Ailane](https://github.com/AILANE-AMAR)** — l'onglet Trésorerie reprend son application
-[AML Trésorerie](https://github.com/AILANE-AMAR/AML-TRESO).
+Co-auteur : **[Amar Ailane](https://github.com/AILANE-AMAR)** — Trésorerie, mandat 2025/2026. L'onglet Trésorerie reprend
+son application [AML Trésorerie](https://github.com/AILANE-AMAR/AML-TRESO).
 
 Réalisé avec l'aide et sur la base de l'ancien projet de **[Mathieu Flouret](https://github.com/megat69)** — Local Stock, mandat 2024/2026.
 
